@@ -144,17 +144,22 @@ def _shortest(token: re.Match) -> str:
     return text[1:2]
 
 
-def may_name_env_file(word: str) -> bool:
-    """Whether *word* is, or is a glob or brace list that can match, a .env file."""
+def may_name_env_file(word: str, dotglob: bool = False) -> bool:
+    """Whether *word* is, or is a glob or brace list that can match, a .env file. A shell glob matches a dot
+    file only when it starts with a dot; with *dotglob* (a `find -name` pattern) it matches anyway."""
     for alt in braces(word):
         name = os.path.basename(alt.rstrip("/"))
         if not GLOB.search(name):
             if is_env_file(alt):
                 return True
-        # A shell glob matches a dot file only when it starts with a dot.
-        elif name.startswith(".") and (
-            any(fnmatch.fnmatchcase(c, name) for c in ENV_NAMES)
-            or is_env_file(GLOB_TOKEN.sub(_shortest, name))
+        elif (
+            dotglob
+            and any(fnmatch.fnmatchcase(c, name) for c in ENV_NAMES)
+            or name.startswith(".")
+            and (
+                any(fnmatch.fnmatchcase(c, name) for c in ENV_NAMES)
+                or is_env_file(GLOB_TOKEN.sub(_shortest, name))
+            )
         ):
             return True
     return False
@@ -283,7 +288,8 @@ def producer(commands: list[guardlib.Command], i: int) -> guardlib.Command | Non
 def reader_refusal(
     argv: list[str], command: guardlib.Command, named: list[str] = ()
 ) -> str | None:
-    """A printing reader in *argv* of a .env file named in its arguments or in *named*."""
+    """A printing reader in *argv* of a .env file named in its arguments, or matched by a `find` pattern
+    in *named*."""
     name = os.path.basename(argv[0]) if argv else ""
     if name not in READERS or redirected(command):
         return None
@@ -291,7 +297,7 @@ def reader_refusal(
         grep_files(name, argv[1:])
         if name in GREPS
         else [w for w in argv[1:] if not w.startswith("-")]
-    ) + list(named)
+    )
     files += [
         target for op, target in command.redirects if op.lstrip("0123456789") == "<"
     ]
@@ -299,7 +305,10 @@ def reader_refusal(
         name == "cut" and names_only(argv[1:])
     )
     if (
-        any(may_name_env_file(f) for f in files)
+        (
+            any(may_name_env_file(f) for f in files)
+            or any(may_name_env_file(f, dotglob=True) for f in named)
+        )
         and not quiet
         and not edits_in_place(name, argv[1:])
     ):
@@ -391,6 +400,33 @@ def inline_refusal(argv: list[str]) -> str | None:
     return None
 
 
+def substituted_reveal(commands: list[guardlib.Command], i: int) -> str | None:
+    """A secret-printing command inside command *i*'s `$(...)`, backticks or `<(...)`, when command *i*
+    prints what it is given (`echo "$(gh auth token)"`, `cat <(op read ...)`) to the terminal."""
+    command = commands[i]
+    argv = command.argv
+    name = os.path.basename(argv[0]) if argv else ""
+    if not (name in PRINTERS or name in PASSTHROUGH or name in READERS):
+        return None
+    if not reaches_terminal(commands, i):
+        return None
+    for inner in commands[command.first : i]:
+        if inner.substituted and not file_redirected_inside(inner):
+            shown = revealed(inner.argv)
+            if shown:
+                return shown
+    return None
+
+
+def file_redirected_inside(command: guardlib.Command) -> bool:
+    """Inside a substitution, output sent to a file (not the substitution) is not handed on."""
+    return any(
+        (op in guardlib.STDOUT_REDIRECTS or op in ("1>", "1>>", "1>|"))
+        and not target.startswith("&")
+        for op, target in command.redirects
+    )
+
+
 def bash_refusal(commands: list[guardlib.Command], i: int) -> str | None:
     command = commands[i]
     argv = command.argv
@@ -422,16 +458,26 @@ def bash_refusal(commands: list[guardlib.Command], i: int) -> str | None:
     ):
         return f"`git {git[0]}` of a .env file: its secrets would land in the transcript.\n\n{ENV_ALTERNATIVE}"
     printed = reaches_terminal(commands, i)
-    shown = revealed(argv)
+    shown = revealed(argv) or (
+        None if command.substituted else substituted_reveal(commands, i)
+    )
     if shown and printed:
         return (
             f"{shown} to the terminal: the secret would land in the transcript.\n\n"
             "Instead: use it without printing it: `X=$(...)`, a pipe straight to the command that needs\n"
             "it (`... | pbcopy`), `op read --out-file <path>`, or `op run -- <command>`."
         )
-    if (command.words in (["env"], ["set"]) or argv == ["printenv"]) and not redirected(
-        command
-    ):
+    dumps = command.words in (["env"], ["set"]) or argv == ["printenv"]
+    # `export`, `declare -p`, `typeset -p` with no names print every variable, secrets included.
+    dumps = dumps or (
+        name in ("export", "declare", "typeset")
+        and command.words == argv
+        and all(w.startswith("-") for w in argv[1:])
+        and not any(
+            set(w) & set("fF") for w in argv[1:]
+        )  # `declare -f` lists functions
+    )
+    if dumps and not redirected(command):
         return (
             f"`{command.words[0]}` with no arguments: it prints every secret in the environment.\n\n"
             "Instead: print one variable that is not a secret (`printenv HOME`), or check one is set\n"

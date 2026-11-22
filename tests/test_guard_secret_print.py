@@ -347,3 +347,44 @@ def test_samples_and_a_pattern_that_only_looks_like_a_name_pass(command: str) ->
 )
 def test_a_env_file_after_the_pattern_is_still_refused(command: str) -> None:
     assert bash(SCRIPT, command)[0] == 2
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'echo "$(gh auth token)"',
+        "echo `op read op://v/i/f`",
+        "printf '%s' \"$(op read op://v/i/f)\"",
+        "cat <(op read op://v/i/f)",
+        "declare -p",
+        "typeset -p",
+        "export",
+        "export -p",
+        "declare -x",
+        "declare",
+        "find . -name '*env' -exec cat {} \\;",
+        "find . -name '*env' | xargs cat",
+    ],
+)
+def test_more_ways_to_print_a_secret_are_refused(command: str) -> None:
+    rc, err = bash(SCRIPT, command)
+    assert rc == 2, command
+    assert "[guards:no-secret-print]" in err
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'TOKEN="$(gh auth token)"',
+        'curl -H "Authorization: Bearer $(gh auth token)" https://example.com',
+        "export -p > /tmp/env.txt",
+        "export FOO=1",
+        "declare -p HOME",
+        "declare -f",
+        'echo "$(gh auth token)" | pbcopy',
+        'echo "$(gh auth token)" > /tmp/token',
+        "find . -name '*.py' -exec cat {} \\;",
+    ],
+)
+def test_uses_that_print_no_secret_pass(command: str) -> None:
+    assert bash(SCRIPT, command)[0] == 0, command
