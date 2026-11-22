@@ -204,6 +204,9 @@ def test_cd_dash_with_no_earlier_cd_stays_in_the_main_checkout(
         "git switch --create=new",
         "git switch --force-create=new",
         "git switch --orphan=gh-pages",
+        "git checkout --conflict diff3 feature",
+        "git switch -- feature",
+        "git switch -d main",
     ],
 )
 def test_more_spellings_of_a_switch_are_refused(
@@ -224,6 +227,9 @@ def test_more_spellings_of_a_switch_are_refused(
         "git checkout -Bmain origin/main",
         "git switch --create=main",
         "git checkout main --",
+        "git checkout --pathspec-from-file=list.txt feature",
+        "git switch --conflict diff3 main",
+        "git switch -t origin/main",
     ],
 )
 def test_more_restores_and_trunk_returns_pass(

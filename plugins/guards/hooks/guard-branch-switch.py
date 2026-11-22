@@ -33,6 +33,8 @@ SWITCH_TRACK = {"-t", "--track"}
 # File modes: with these, `git checkout` only restores files. (`-m`, `--merge` and `--conflict` also work
 # with a branch, so the operands decide.)
 FILE_MODE = {"-p", "--patch", "--ours", "--theirs", "--pathspec-from-file"}
+# Options whose value is the next word when it isn't attached with `=`.
+VALUE_OPTIONS = {"--conflict"}
 
 
 def _git(place: str, *args: str) -> str | None:
@@ -86,16 +88,28 @@ def switches(sub: str, args: list[str], place: str) -> bool:
     for word in words:
         if word == "--":
             paths = list(words)
+            if (
+                sub == "switch"
+            ):  # `git switch` takes no paths: what follows `--` is the branch
+                positional += paths
+                paths = []
             break
         created = _created(sub, word, words)
         if created is not None:
             # `git checkout -B main origin/main` resets the trunk and stays on it.
             return created not in TRUNKS
         if sub == "switch" and word in SWITCH_TRACK:
-            return next(words, None) not in TRUNKS
-        if sub == "checkout" and word in FILE_MODE:
+            # The local branch is named after the start point's last part: `-t origin/main` is `main`.
+            start = next(words, "") or ""
+            return start.rsplit("/", 1)[-1] not in TRUNKS
+        if sub == "checkout" and (
+            word in FILE_MODE or word.startswith("--pathspec-from-file=")
+        ):
             return False
-        if word == "--detach" or word == "-":
+        if word in VALUE_OPTIONS:
+            next(words, None)
+            continue
+        if word in ("--detach", "-") or (sub == "switch" and word == "-d"):
             return True
         if not word.startswith("-"):
             positional.append(word)
