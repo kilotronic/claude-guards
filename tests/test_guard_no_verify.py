@@ -109,8 +109,8 @@ def repo(tmp_path: Path) -> Path:
 
 
 def _bypass(command: str) -> str | None:
-    for segment in guard._segments(command):
-        git = guard._Git.parse(segment)
+    for parsed in guard.guardlib.parse(command):
+        git = guard._Git.parse(parsed)
         if git and git.bypass():
             return git.bypass()
     return None
@@ -324,3 +324,72 @@ def test_a_reword_in_a_sibling_worktree_is_judged_by_that_worktree(
     clean = _init_repo(tmp_path / "clean")
     command = f"cd {clean}; git commit --amend --no-edit --no-verify"
     assert run_hook(command, dirty) == ALLOW
+
+
+def _staged(repo: Path) -> Path:
+    (repo / "new.txt").write_text("new\n")
+    _git(repo, "add", "new.txt")
+    return repo
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "(cd /tmp && ls) && git commit --no-verify -m x",
+        "bash -lc 'git commit --no-verify -m x'",
+        "bash -euo pipefail -c 'git commit --no-verify -m x'",
+        "cat <<EOF | git commit --no-verify -F -\nbody\nEOF",
+        "git commit -nm x",
+        "git commit --no-veri -m x",
+        "echo | xargs git commit --no-verify -m x",
+        "caffeinate git commit -n -m x",
+        "stdbuf -o0 git commit -n -m x",
+    ],
+)
+def test_a_bypass_of_new_content_is_refused(repo: Path, command: str) -> None:
+    assert run_hook(command, _staged(repo)) == BLOCK, command
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo git commit -n",
+        "git commit -mfinal",
+        "git commit -uno -m x",
+        "git commit -m 'x' --no-verbose",
+    ],
+)
+def test_text_and_flag_values_are_not_a_bypass(repo: Path, command: str) -> None:
+    assert run_hook(command, _staged(repo)) == ALLOW, command
+
+
+@pytest.mark.parametrize("flag", ["-p", "--patch", "--interactive", "-pn"])
+def test_a_bypass_that_stages_hunks_during_the_commit_is_refused(
+    repo: Path, flag: str
+) -> None:
+    """The index matches HEAD before the commit, but `-p` stages new hunks into it."""
+    (repo / "a.txt").write_text("changed\n")
+    assert run_hook(f"git commit --amend --no-edit --no-verify {flag}", repo) == BLOCK
+
+
+def test_git_dash_c_with_a_tilde_is_judged_in_that_repo(
+    repo: Path, monkeypatch
+) -> None:
+    home = repo.parent
+    _staged(repo)
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": f"git -C ~/{repo.name} commit -n -m x"},
+        "cwd": "/",
+    }
+    env = {**_clean_env(), "HOME": str(home)}
+    done = subprocess.run(
+        [sys.executable, str(HOOK)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+        env=env,
+    )
+    assert done.returncode == BLOCK

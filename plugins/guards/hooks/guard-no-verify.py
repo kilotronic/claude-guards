@@ -8,8 +8,9 @@ already passed, and forbidden for new changes. The two
 are told apart by CONTENT, not by flags: the index tree is compared with HEAD's
 and ORIG_HEAD's. A reword leaves it equal to HEAD; a squash after
 `git reset --soft` leaves it equal to ORIG_HEAD; anything else is new content.
-The command is tokenized shell-style so a quoted message, a heredoc body or a
-`;` inside `-m` cannot hide or fake a commit. It refuses the ordinary spellings
+The command is read with the shared parser (guardlib), so a quoted message, an
+`echo`, a heredoc body or a `;` inside `-m` cannot hide or fake a commit, and `cd`,
+`git -C`, `bash -c` and `$(...)` are followed. It refuses the ordinary spellings
 and fails open on the rest — it is not a shell; it covers the cases an agent actually types.
 `no-commit-on-main` off in the overrides file turns it off for a repo.
 """
@@ -28,13 +29,7 @@ import guardlib
 
 RULE = "no-commit-on-main"
 
-_HEREDOC = re.compile(
-    r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\s*$", re.DOTALL | re.MULTILINE
-)
-_SEPARATORS = {";", "&&", "||", "|", "&", "(", ")"}
 _ENV_ASSIGN = re.compile(r"^\w+=")
-_REDIRECT = re.compile(r"^(?:[<>]{1,2}&?|&>>?)$")
-_SHELLS = {"bash", "sh", "zsh", "dash"}
 _GIT_GLOBAL_WITH_VALUE = {"-C", "-c"}
 _GIT_GLOBAL_FLAGS = {"--no-pager", "--bare", "--no-replace-objects"}
 _COMMIT_VALUE_FLAGS = {
@@ -42,8 +37,25 @@ _COMMIT_VALUE_FLAGS = {
     "--template", "--fixup", "--squash", "--reuse-message", "--reedit-message",
     "--trailer", "--cleanup", "--pathspec-from-file",
 }  # fmt: skip
-_OUTSIDE_INDEX = {"-a", "--all", "-i", "--include", "-o", "--only"}
+# Content the index tree cannot vouch for: `-p`/`--interactive` stage new hunks during the commit.
+_OUTSIDE_INDEX = {
+    "-a",
+    "--all",
+    "-i",
+    "--include",
+    "-o",
+    "--only",
+    "-p",
+    "--patch",
+    "--interactive",
+}
 _SHORT_FLAGS = re.compile(r"^-[a-zA-Z]+$")
+# Short options of `git commit` that take a value, attached or as the next word: in `-mfinal` the `m` takes
+# `final`, so its `n` is not `-n`.
+_SHORT_VALUED = set("mFCctuS")
+_NO_VERIFY = "--no-verify"
+# git accepts a unique prefix of a long option; `--no-ver` could also be `--no-verbose`.
+_NO_VERIFY_SHORTEST = len("--no-veri")
 # Anything that writes the index before the commit in the same line. `reset`
 # is only benign as `--soft` (the sanctioned squash), handled in `writes_index`.
 _INDEX_WRITERS = {
@@ -53,62 +65,34 @@ _INDEX_WRITERS = {
 
 
 def _tokens(text: str) -> list[str]:
-    """Shell words; operators and unquoted newlines come out as their own tokens."""
-    lex = shlex.shlex(text, posix=True, punctuation_chars=";&|()<>\n")
-    lex.whitespace = " \t\r"
+    """Shell words of an alias expansion."""
+    lex = shlex.shlex(text, posix=True)
     lex.whitespace_split = True
     try:
-        tokens = list(lex)
+        return list(lex)
     except ValueError:
-        tokens = text.split()
-    return _without_redirections(tokens)
+        return text.split()
 
 
-def _without_redirections(tokens: list[str]) -> list[str]:
-    """Drop `> file`, `2>&1`, `< in`: their operands are not pathspecs."""
-    out: list[str] = []
-    skip = False
-    for token in tokens:
-        if skip:
-            skip = False
-            continue
-        if _REDIRECT.match(token):
-            if out and out[-1].isdigit():
-                out.pop()
-            skip = True
-            continue
-        out.append(token)
-    return out
+def _takes_next(token: str) -> bool:
+    """`-m x`, `-nm x`: a short group that ends in a value letter takes the next word (`-u` and `-S` take
+    theirs only attached)."""
+    return (
+        bool(_SHORT_FLAGS.match(token))
+        and _short_letters(token) == token[1:]
+        and token[-1] in _SHORT_VALUED
+        and token[-1] not in "uS"
+    )
 
 
-def _segments(command: str) -> list[list[str]]:
-    """Simple commands, split on shell operators; heredoc bodies are dropped first.
-
-    `bash -c '…'` and `eval '…'` are unwrapped in place, so the commands inside
-    a quoted string are judged like the ones outside it.
-    """
-    segments: list[list[str]] = [[]]
-    for token in _tokens(_HEREDOC.sub("", command)):
-        if token in _SEPARATORS or token.startswith((";", "\n")):
-            if segments[-1]:
-                segments.append([])
-        else:
-            segments[-1].append(token)
-    out: list[list[str]] = []
-    for segment in (s for s in segments if s):
-        inner = _wrapped_script(segment)
-        out.extend(_segments(inner) if inner is not None else [segment])
-    return out
-
-
-def _wrapped_script(segment: list[str]) -> str | None:
-    head = os.path.basename(segment[0])
-    if head in _SHELLS and "-c" in segment[1:]:
-        at = segment.index("-c")
-        return segment[at + 1] if at + 1 < len(segment) else None
-    if head == "eval":
-        return " ".join(segment[1:])
-    return None
+def _short_letters(token: str) -> str:
+    """The option letters of a short cluster, up to and including the first that takes a value."""
+    letters = ""
+    for ch in token[1:]:
+        letters += ch
+        if ch in _SHORT_VALUED:
+            break
+    return letters
 
 
 class _Git:
@@ -120,16 +104,15 @@ class _Git:
         self.env, self.globals, self.sub, self.args = env, globals_, sub, args
 
     @classmethod
-    def parse(cls, segment: list[str]) -> _Git | None:
-        """Anything before the first `git` word is a prefix: env, nice, timeout, sudo…"""
-        try:
-            i = next(
-                k for k, tok in enumerate(segment) if os.path.basename(tok) == "git"
-            )
-        except StopIteration:
+    def parse(cls, command: guardlib.Command) -> _Git | None:
+        """A `git` command from the shared parser; `VAR=x` before it (or after `env`) is its env."""
+        argv = guardlib.launched_git(command.argv)
+        if not argv or os.path.basename(argv[0]) != "git":
             return None
-        env = [tok for tok in segment[:i] if _ENV_ASSIGN.match(tok)]
-        i += 1
+        prefix = command.words[: len(command.words) - len(argv)]
+        env = list(command.assignments) + [t for t in prefix if _ENV_ASSIGN.match(t)]
+        segment = argv
+        i = 1
         globals_: list[str] = []
         while i < len(segment):
             token = segment[i]
@@ -155,9 +138,9 @@ class _Git:
         if any(e.startswith("SKIP=") for e in self.env):
             return "SKIP="
         for token in self._flags():
-            if token.startswith("--no-ver"):  # git accepts any unique prefix
+            if len(token) >= _NO_VERIFY_SHORTEST and _NO_VERIFY.startswith(token):
                 return token
-            if _SHORT_FLAGS.match(token) and "n" in token:
+            if _SHORT_FLAGS.match(token) and "n" in _short_letters(token):
                 return token
         return None
 
@@ -174,6 +157,7 @@ class _Git:
                 continue
             if token.startswith("-"):
                 out.append(token)
+                skip = _takes_next(token)
         return out
 
     def commits_outside_the_index(self) -> bool:
@@ -188,8 +172,13 @@ class _Git:
             if token in _COMMIT_VALUE_FLAGS:
                 skip = True
                 continue
-            if token in _OUTSIDE_INDEX or (_SHORT_FLAGS.match(token) and "a" in token):
+            if token in _OUTSIDE_INDEX or (
+                _SHORT_FLAGS.match(token) and set("aiop") & set(_short_letters(token))
+            ):
                 return True
+            if _takes_next(token):
+                skip = True  # `-nm x`: the message is not a pathspec
+                continue
             if not token.startswith("-"):
                 return True  # a bare pathspec
         return False
@@ -205,7 +194,7 @@ class _Git:
     def cwd(self, base: str) -> str:
         for i, token in enumerate(self.globals):
             if token == "-C" and i + 1 < len(self.globals):
-                base = os.path.join(base, self.globals[i + 1])
+                base = os.path.join(base, os.path.expanduser(self.globals[i + 1]))
         return base
 
 
@@ -274,17 +263,15 @@ def index_already_passed(cwd: str) -> bool | None:
 
 def refusal(command: str, cwd: str) -> tuple[str, str] | None:
     """(The reason to refuse this command line, the worktree it acts in), or None to allow it."""
-    here = cwd
     index_written = False
     disarmed: str | None = None
-    for segment in _segments(command):
-        if segment[0] == "cd" and len(segment) > 1:
-            here = os.path.join(here, os.path.expanduser(segment[1]))
-            continue
-        if segment[0] == "export" and any(a.startswith("SKIP=") for a in segment[1:]):
+    for parsed in guardlib.parse(command, cwd=cwd):
+        argv = parsed.argv
+        here = parsed.cwd or cwd
+        if argv[:1] == ["export"] and any(a.startswith("SKIP=") for a in argv[1:]):
             disarmed = "export SKIP="
             continue
-        git = _Git.parse(segment)
+        git = _Git.parse(parsed)
         if git is None:
             continue
         if git.disarms_hooks():
@@ -319,7 +306,11 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return 0  # fail open: an unreadable payload is not evidence of a bypass
-    command = (payload.get("tool_input") or {}).get("command") or ""
+    if not isinstance(payload, dict) or not isinstance(payload.get("tool_input"), dict):
+        return 0
+    command = payload["tool_input"].get("command")
+    if not isinstance(command, str):
+        return 0
     found = refusal(command, payload.get("cwd") or os.getcwd())
     if found is None:
         return 0

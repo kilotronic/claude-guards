@@ -4,16 +4,15 @@
 """PreToolUse:Bash hook — refuse `git commit` in a worktree that is on `main`.
 
 Never work on the trunk (`main` or `master`); `no-commit-on-main` off in the overrides file, or
-a `.main-edit-ok` file at the repo root opts a repo out, as for block-main-edits.py. The target worktree is
-the payload's `cwd` moved by any `cd` before the commit and `git -C`, as in
-`guard-hard-reset.py`. Fails open on an unreadable payload or a git error.
+a `.main-edit-ok` file at the repo root opts a repo out, as for block-main-edits.py. Every commit in the command is
+checked, each in the worktree the shared parser finds for it (the payload's `cwd` moved by `cd` and
+`git -C`). Fails open on an unreadable payload or a git error.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 
@@ -22,44 +21,31 @@ import guardlib
 
 RULE = "no-commit-on-main"
 
-_COMMIT = re.compile(
-    r"(?<![\w.-])git\b"
-    + r"((?:\s+-C\s+\S+|\s+-c\s+\S+|\s+--no-pager)*)"
-    + r"\s+commit(?![\w-])"
-)
-_DASH_C = re.compile(r"-C\s+(\S+)")
-_CD = re.compile(r"(?<![\w.-])cd\s+([^\s;&|]+)")
-_QUOTED = re.compile(r"""'[^']*'|"[^"]*\"""")
-_HEREDOC = re.compile(
-    r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_]\w*)\1[^\n]*\n(.*?)\n\2$", re.DOTALL | re.MULTILINE
-)
+
+def target_dirs(command: str, cwd: str) -> list[str]:
+    """The worktrees the commits in *command* act in (after `cd` and `git -C`). Text that is only quoted,
+    echoed or in a heredoc body never counts; `bash -c` and `$(...)` do."""
+    out = []
+    for parsed in guardlib.parse(command, cwd=cwd):
+        git = guardlib.git_args(guardlib.launched_git(parsed.argv))
+        if git and git[0] == "commit":
+            out.append(guardlib.where(parsed, git[2]) or cwd)
+    return out
 
 
-def _mask(command: str) -> str:
-    """*command* with heredoc bodies and quoted text blanked, the same length.
-
-    A quoted word keeps its quotes around non-space filler, so it stays one word
-    whose span reads the original path back.
-    """
-    for match in _HEREDOC.finditer(command):
-        a, b = match.span(3)
-        command = command[:a] + " " * (b - a) + command[b:]
-    return _QUOTED.sub(lambda m: m[0][0] + "x" * (len(m[0]) - 2) + m[0][-1], command)
+def refused(where: str) -> bool:
+    return (
+        branch(where) in TRUNK_BRANCHES
+        and not opted_out(where)
+        and not guardlib.off(RULE, where)
+    )
 
 
 def target_dir(command: str, cwd: str) -> str | None:
-    """The worktree a commit in *command* acts on, or None for no commit."""
-    masked = _mask(command)
-    match = _COMMIT.search(masked)
-    if match is None:
-        return None
-    flags = match.span(1)
-    spans = [m.span(1) for m in _CD.finditer(masked, 0, match.start())]
-    spans += [m.span(1) for m in _DASH_C.finditer(masked, *flags)]
-    where = cwd
-    for a, b in spans:
-        where = os.path.join(where, os.path.expanduser(command[a:b].strip("'\"")))
-    return os.path.normpath(where)
+    """The first worktree a commit in *command* would be refused in, else the first it acts in, or None for
+    no commit."""
+    places = target_dirs(command, cwd)
+    return next((p for p in places if refused(p)), places[0] if places else None)
 
 
 def branch(where: str) -> str | None:
@@ -99,11 +85,13 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return 0  # fail open: an unreadable payload is not evidence of a commit
-    command = (payload.get("tool_input") or {}).get("command") or ""
-    where = target_dir(command, payload.get("cwd") or os.getcwd())
-    if where is None or branch(where) not in TRUNK_BRANCHES or opted_out(where):
+    if not isinstance(payload, dict) or not isinstance(payload.get("tool_input"), dict):
         return 0
-    if guardlib.off(RULE, where):
+    command = payload["tool_input"].get("command")
+    if not isinstance(command, str):
+        return 0
+    where = target_dir(command, payload.get("cwd") or os.getcwd())
+    if where is None or not refused(where):
         return 0
     return guardlib.refuse(
         RULE,
