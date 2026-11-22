@@ -123,3 +123,24 @@ def test_the_refusal_prints_no_refused_command(tmp_path: Path) -> None:
     _, err = _run("git reset --hard HEAD", repo)
     for line in err.splitlines():
         assert guard.target_dir(line, str(repo)) is None, line
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'git commit -am "explain git reset --hard"',
+        'echo "git reset --hard"',
+    ],
+)
+def test_a_hard_reset_that_is_only_quoted_passes(tmp_path: Path, command: str) -> None:
+    repo = _repo(tmp_path / "r", "feature")
+    (repo / "f.txt").write_text("dirty\n")
+    assert guard.target_dir(command, str(repo)) is None
+
+
+def test_a_hard_reset_after_a_subshell_cd_acts_in_the_outer_directory(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path / "r", "main")
+    command = "(cd /tmp && ls); git reset --hard"
+    assert guard.target_dir(command, str(repo)) == str(repo)

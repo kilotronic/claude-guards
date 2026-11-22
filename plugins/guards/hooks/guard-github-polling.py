@@ -7,7 +7,7 @@
 polls as fast as it sleeps; both burn the GitHub API rate limit shared by every agent on the account. One
 watch with `--interval 60` or more is the way to wait. Refused: such a watch without that interval; a
 `while`/`until`/`repeat` loop that runs `gh` (except `... | while read`, which walks a list once); a `for`
-loop that runs `gh` and sleeps; `watch ... gh ...`. One-off `gh` calls pass.
+loop whose `gh` call ignores the loop variable (the same query each pass); `watch ... gh ...`. One-off `gh` calls pass.
 """
 
 from __future__ import annotations

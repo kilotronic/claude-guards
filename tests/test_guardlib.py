@@ -238,3 +238,12 @@ def test_an_unreadable_plugin_json_falls_back_to_guards(tmp_path: Path) -> None:
         check=True,
     )
     assert done.stdout.strip() == "[guards:x]"
+
+
+def test_a_cd_inside_a_subshell_stays_inside_it() -> None:
+    commands = guardlib.parse("(cd /elsewhere && make); git status", cwd="/repo")
+    assert [(c.argv[:2], c.cwd) for c in commands] == [
+        (["cd", "/elsewhere"], "/repo"),
+        (["make"], "/elsewhere"),
+        (["git", "status"], "/repo"),
+    ]

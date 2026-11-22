@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 
@@ -22,26 +21,23 @@ import guardlib
 
 RULE = "no-commit-on-main"
 
-_HARD_RESET = re.compile(
-    r"(?<![\w.-])git\b"
-    + r"((?:\s+-C\s+\S+|\s+-c\s+\S+|\s+--no-pager)*)"
-    + r"\s+reset\b[^;&|\n]*\s--hard\b"
-)
-_DASH_C = re.compile(r"-C\s+(\S+)")
-_CD = re.compile(r"(?<![\w.-])cd\s+([^\s;&|]+)")
+
+def _hard_reset(argv: list[str]) -> list[str] | None:
+    """The `git -C` directories of a `git reset --hard`, or None for another command."""
+    git = guardlib.git_args(argv)
+    if git and git[0] == "reset" and "--hard" in git[1]:
+        return git[2]
+    return None
 
 
 def target_dir(command: str, cwd: str) -> str | None:
-    """The worktree a hard reset in *command* acts on, or None for no hard reset."""
-    match = _HARD_RESET.search(command)
-    if match is None:
-        return None
-    dash_c = _DASH_C.findall(match.group(1))
-    cds = _CD.findall(command[: match.start()])
-    where = cwd
-    for step in cds + dash_c:
-        where = os.path.join(where, os.path.expanduser(step.strip("'\"")))
-    return os.path.normpath(where)
+    """The worktree the first hard reset in *command* acts on (after `cd` and `git -C`), or None for no
+    hard reset. Quoted text, a heredoc body or an `echo` never counts."""
+    for parsed in guardlib.parse(command, cwd=cwd):
+        dirs = _hard_reset(parsed.argv)
+        if dirs is not None:
+            return guardlib.where(parsed, dirs)
+    return None
 
 
 def _git(where: str, *args: str) -> str | None:
@@ -73,7 +69,11 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return 0  # fail open: an unreadable payload is not evidence of a reset
-    command = (payload.get("tool_input") or {}).get("command") or ""
+    if not isinstance(payload, dict) or not isinstance(payload.get("tool_input"), dict):
+        return 0
+    command = payload["tool_input"].get("command")
+    if not isinstance(command, str):
+        return 0
     where = target_dir(command, payload.get("cwd") or os.getcwd())
     reason = None if where is None else refusal(where)
     if reason is None or guardlib.off(RULE, where):

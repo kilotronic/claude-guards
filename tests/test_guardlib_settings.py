@@ -281,3 +281,16 @@ def test_the_env_var_wins_over_the_user_file(
     write(user, {})
     monkeypatch.setenv("CLAUDE_GUARDS_OVERRIDES", str(tmp_path / "named.json"))
     assert guardlib.overrides_path() == str(tmp_path / "named.json")
+
+
+def test_commands_for_reads_the_setting_of_the_repo_git_c_names(
+    repo: Path, tmp_path: Path
+) -> None:
+    turn_off(repo, "no-wholesale-ours-theirs")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    event = {
+        "tool_input": {"command": f"git -C {repo} checkout --ours f"},
+        "cwd": str(elsewhere),
+    }
+    assert guardlib.commands_for("no-wholesale-ours-theirs", event) == []

@@ -264,7 +264,10 @@ class _Parser:
             elif ch == "(":
                 end_command()
                 self.i += 1
+                # A subshell's `cd` ends with it.
+                outer = (self.cwd, self.oldcwd)
                 self.parse_list(")", substituted=substituted)
+                self.cwd, self.oldcwd = outer
             elif ch == ")":
                 end_command()
                 self.i += 1
@@ -698,7 +701,12 @@ def off(rule: str, place: str | None) -> bool:
 
 def commands_for(rule: str, event: dict) -> list[Command]:
     """`bash_commands`, less those acting in a repo whose settings turn *rule* off."""
-    return [c for c in bash_commands(event) if not off(rule, where(c))]
+
+    def place(command: Command) -> str | None:
+        git = git_args(command.argv)
+        return where(command, git[2] if git else [])
+
+    return [c for c in bash_commands(event) if not off(rule, place(c))]
 
 
 @functools.lru_cache(maxsize=1)

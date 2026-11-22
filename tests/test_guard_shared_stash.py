@@ -91,3 +91,24 @@ def test_refusal_does_not_print_a_blocked_stash_recipe() -> None:
         stripped = line.strip()
         if stripped.startswith("git "):
             assert not guard.pushes_to_stash(stripped), stripped
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'git commit -m "never use git stash here"',
+        'echo "git stash"',
+        "cat <<'EOF'\ngit stash\nEOF",
+    ],
+)
+def test_a_stash_that_is_only_quoted_passes(command: str) -> None:
+    assert not guard.pushes_to_stash(command), command
+
+
+def test_a_stash_inside_bash_c_is_refused() -> None:
+    assert guard.pushes_to_stash("bash -c 'git stash push'")
+
+
+def test_the_advice_works_on_a_stock_git() -> None:
+    assert "rebase.autostash is on" not in guard.MESSAGE
+    assert "--autostash" in guard.MESSAGE

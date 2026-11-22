@@ -1,5 +1,5 @@
 {
-  "description": "Guards that stop risky git, GitHub and shell commands before they run (stash, hard reset, --no-verify, commits and edits on main, branch switches in the main checkout, admin merges, fast GitHub polling, printed secrets, zsh special names, wholesale ours/theirs), and a formatter after each edit",
+  "description": "Guards that stop risky git, GitHub and shell commands before they run (stash, hard reset, --no-verify, commits and edits on main, branch switches in the main checkout, admin merges, fast GitHub polling, printed secrets, zsh special names, wholesale ours/theirs)",
   "hooks": {
     "PreToolUse": [
       {
@@ -74,18 +74,6 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-secret-print.py\"",
             "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/format-on-edit.py\"",
-            "timeout": 30
           }
         ]
       }

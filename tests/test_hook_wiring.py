@@ -146,11 +146,6 @@ def test_the_main_edit_guard_is_registered_for_every_edit_tool_and_blocks(
     assert done.returncode == 2, (done.returncode, done.stderr)
 
 
-@pytest.mark.parametrize("tool", ["Edit", "Write"])
-def test_format_on_edit_runs_after_edit_and_write(tool: str) -> None:
-    assert "format-on-edit.py" in _commands("PostToolUse", tool)
-
-
 def test_the_secret_guard_also_runs_on_read(dirty_main: Path) -> None:
     command = _commands("PreToolUse", "Read")["guard-secret-print.py"]
     payload = {
