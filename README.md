@@ -20,7 +20,8 @@ no other packages.
 ## What each guard does
 
 Each guard has a rule id. It appears in its refusal as `[guards:<id>]`, and you use the id to turn the rule
-off for a repo (see below).
+off for a repo (see below). A plugin that bundles a copy of `guardlib.py` for hooks of its own gets labels
+with its own name from its `plugin.json`.
 
 | Hook                        | Rule id                    | Refuses                                                                                                                                                                                                                                                 |
 | --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -200,3 +201,40 @@ def test_a_variable_assigned_a_program_in_the_same_command_is_expanded() -> None
     # Not assigned here, or assigned from a substitution: left alone.
     assert argvs("$g checkout x") == [["$g", "checkout", "x"]]
     assert argvs("g=$(which git); $g checkout x")[-1] == ["$g", "checkout", "x"]
+
+
+def test_the_label_names_the_plugin_that_ships_guardlib() -> None:
+    assert guardlib.label("no-admin-merge") == "[guards:no-admin-merge]"
+
+
+def test_a_plugin_that_bundles_guardlib_labels_with_its_own_name(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".claude-plugin").mkdir()
+    (tmp_path / ".claude-plugin" / "plugin.json").write_text('{"name": "mine"}')
+    (tmp_path / "hooks").mkdir()
+    copy = tmp_path / "hooks" / "guardlib.py"
+    copy.write_text((HOOKS / "guardlib.py").read_text())
+    done = subprocess.run(
+        [sys.executable, "-c", "import guardlib; print(guardlib.label('x'))"],
+        cwd=tmp_path / "hooks",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert done.stdout.strip() == "[mine:x]"
+
+
+def test_an_unreadable_plugin_json_falls_back_to_guards(tmp_path: Path) -> None:
+    (tmp_path / ".claude-plugin").mkdir()
+    (tmp_path / ".claude-plugin" / "plugin.json").write_text("not json")
+    (tmp_path / "hooks").mkdir()
+    (tmp_path / "hooks" / "guardlib.py").write_text((HOOKS / "guardlib.py").read_text())
+    done = subprocess.run(
+        [sys.executable, "-c", "import guardlib; print(guardlib.label('x'))"],
+        cwd=tmp_path / "hooks",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert done.stdout.strip() == "[guards:x]"

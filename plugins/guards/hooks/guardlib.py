@@ -9,7 +9,7 @@ wrapper words (`env`, `command`, `sudo`, ...) and `bash -c`/`eval` strings. It n
 gives its best reading.
 
 A guard calls `run(RULE, refusal)`: `refusal(event)` returns why the call is refused (and the safe
-alternative), or None. The refusal names the rule as `[guards:<rule>]`; an overrides file may turn a rule off
+alternative), or None. The refusal names the rule as `[guards:<rule>]` (or the name of a plugin that bundles this file); an overrides file may turn a rule off
 for a repo, with a reason (`rule_setting`). Any error in a guard lets the call through.
 """
 
@@ -26,6 +26,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+NAME_OK = re.compile(r"[a-z0-9][a-z0-9-]*")
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?\+?=")
 SUBSTITUTION = "$(...)"
 # Words that start a command without changing which program runs.
@@ -700,8 +701,23 @@ def commands_for(rule: str, event: dict) -> list[Command]:
     return [c for c in bash_commands(event) if not off(rule, where(c))]
 
 
+@functools.lru_cache(maxsize=1)
+def plugin_name() -> str:
+    """The name in `.claude-plugin/plugin.json` of the plugin this file ships in, else "guards": a plugin that
+    bundles guardlib labels its refusals with its own name."""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        with open(
+            os.path.join(here, ".claude-plugin", "plugin.json"), encoding="utf-8"
+        ) as f:
+            name = json.load(f).get("name")
+    except Exception:  # noqa: BLE001 - a label must never break a guard
+        return "guards"
+    return name if isinstance(name, str) and NAME_OK.fullmatch(name) else "guards"
+
+
 def label(rule: str) -> str:
-    return f"[guards:{rule}]"
+    return f"[{plugin_name()}:{rule}]"
 
 
 def run(
