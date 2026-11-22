@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "claude-guards",
-  "description": "Claude Code hooks that stop risky git, GitHub and shell commands",
+  "description": "Claude Code plugins: hooks that stop risky git, GitHub and shell commands, and the goal command for what to work on next",
   "owner": {
     "name": "Kilotronic"
   },
@@ -10,6 +10,11 @@
       "name": "guards",
       "description": "Hooks that stop risky git, GitHub and shell commands an agent is about to run, and say what to do instead",
       "source": "./plugins/guards"
+    },
+    {
+      "name": "work",
+      "description": "The goal command and the skills around it: what to work on next, claiming it in the todo file, and landing it",
+      "source": "./plugins/work"
     }
   ]
 }
