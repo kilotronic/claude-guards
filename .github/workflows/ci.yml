@@ -44,7 +44,7 @@ jobs:
           denylist: ${{ secrets.DATA_LEAK_DENYLIST }}
           if-empty: ${{ (github.event.pull_request.head.repo.fork || github.actor == 'dependabot[bot]') && 'skip' || 'fail' }}
 
-  # Secrets in this event's commits, from kilotronic/secret-scan.
+  # Secrets in this event's commits, from kilotronic/checks.
   secret-scan:
     runs-on: ubuntu-latest
     steps:
