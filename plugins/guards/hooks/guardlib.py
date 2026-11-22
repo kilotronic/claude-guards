@@ -32,8 +32,6 @@ SUBSTITUTION = "$(...)"
 # Words that start a command without changing which program runs.
 WRAPPERS = {"command", "builtin", "exec", "nohup", "time", "noglob", "nocorrect"}
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
-# Shell options that take the next word as their value.
-SHELL_VALUE_OPTIONS = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
 # Reserved words dropped from the front of a command.
 RESERVED = {"!", "{", "}", "do", "then", "else", "elif", "if", "fi", "esac"}
 STDOUT_REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
@@ -182,11 +180,17 @@ class _Parser:
                     command.refs.append(refs)
             word, refs, started = [], [], False
 
-        def end_command(piped: bool = False) -> None:
+        def end_command(piped: bool = False, subshell: bool = False) -> None:
+            """*subshell*: the command ran in a subshell (before a pipe, or sent to the background), so
+            its `cd` ends with it. The last part of a pipeline keeps its `cd`, as in zsh (the macOS shell);
+            bash without `lastpipe` would drop it."""
             nonlocal command
             end_word()
             command.piped = piped
+            outer = (self.cwd, self.oldcwd)
             self.finish(command)
+            if subshell:
+                self.cwd, self.oldcwd = outer
             command = Command(substituted=substituted, first=len(self.out))
 
         while self.i < len(self.text):
@@ -259,10 +263,10 @@ class _Parser:
                 two = self.text[self.i : self.i + 2]
                 if two in ("&&", "||", ";;", "|&"):
                     self.i += 2
-                    end_command(piped=two == "|&")
+                    end_command(piped=two == "|&", subshell=two == "|&")
                 else:
                     self.i += 1
-                    end_command(piped=ch == "|")
+                    end_command(piped=ch == "|", subshell=ch in "|&")
             elif ch == "(":
                 end_command()
                 self.i += 1
@@ -457,19 +461,29 @@ def _inner_script(argv: list[str]) -> str | None:
         return None
     if argv[0] == "eval":
         return " ".join(argv[1:])
-    if os.path.basename(argv[0]) in SHELLS:
-        words = iter(enumerate(argv[1:], 1))
-        for k, word in words:
-            if word in SHELL_VALUE_OPTIONS:
-                next(words, None)  # its value, such as `pipefail`
-                continue
-            if not word.startswith(("-", "+")):
-                return None
-            if word.startswith(("--", "+")):
-                continue
-            if "c" in word[1:]:
-                return argv[k + 1] if k + 1 < len(argv) else None
-    return None
+    if os.path.basename(argv[0]) not in SHELLS:
+        return None
+    # Options come first, `-c` among them, and the script is the first word after them (and after `--`).
+    # Each `o`/`O` in a `-`/`+` group takes the next word as its value (`-euo pipefail`, `-oc pipefail`).
+    words, k, values, script = argv[1:], 0, 0, False
+    while k < len(words):
+        word = words[k]
+        k += 1
+        if values:
+            values -= 1
+        elif word in ("--", "-"):  # a lone `-` also ends the options
+            break
+        elif word in ("--rcfile", "--init-file"):
+            values = 1
+        elif word.startswith("--"):
+            continue
+        elif len(word) > 1 and word[0] in "-+":
+            values = word.count("o") + word.count("O")
+            script = script or (word[0] == "-" and "c" in word[1:])
+        else:
+            k -= 1
+            break
+    return words[k] if script and k < len(words) else None
 
 
 def parse(text: str, cwd: str | None = None) -> list[Command]:
