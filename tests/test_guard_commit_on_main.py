@@ -165,3 +165,35 @@ def test_a_repo_that_works_on_its_trunk_opts_out(tmp_path: Path) -> None:
     repo = _repo(tmp_path / "r", "main")
     (repo / ".main-edit-ok").touch()
     assert _run("git commit -m x", repo)[0] == 0
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git -C {feature} commit -m y; git commit -m x",
+        "(cd {feature} && ls); git commit -m x",
+        "cd {feature} | cat; git commit -m x",
+        "bash -c 'git commit -m wip'",
+        "bash -lc 'git commit -m wip'",
+    ],
+)
+def test_every_commit_on_main_is_refused(tmp_path: Path, command: str) -> None:
+    main = _repo(tmp_path / "main", "main")
+    feature = _repo(tmp_path / "feature", "feature")
+    rc, _ = _run(command.format(feature=feature), main)
+    assert rc == 2, command
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo git commit -m x",
+        'git log --grep "git commit"',
+        "cat <<'EOF'\ngit commit\nEOF",
+    ],
+)
+def test_a_commit_that_is_only_text_passes_on_main(
+    tmp_path: Path, command: str
+) -> None:
+    main = _repo(tmp_path / "main", "main")
+    assert _run(command, main)[0] == 0, command
