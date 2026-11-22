@@ -2,12 +2,17 @@
 
 """goal: what to work on next in this repo, from what the repo states in writing.
 
-It reads, from the default branch on origin (never the checkout, which may be behind):
+It reads, from the working copy (so goals edited locally count right away):
 
 - the README's `## How work runs here` section: the milestone or goals file, the todo file and the limit on
   work in progress;
 - the todo file: its Defects and Next sections, top first, and the claim marks on their entries;
 - `.claude/work.toml`, optional: other heading names, entries that need the owner, the merge method.
+
+Claim marks are the exception: a claim is only real once its pull request has merged, so they are read from
+origin's default branch, found by asking GitHub (`gh repo view`), not from the local `origin/HEAD`, which can be
+stale. A mark that exists only in the working copy is reported as not yet merged and not counted. When GitHub
+can't be reached, goal says claims weren't checked and answers from the local files alone.
 
 Then it answers in a fixed order: your own claimed item; else the top free defect, one fix at a time; else the
 top free Next item, with a warning when that goes over the limit; else a cleanup. Nothing here blocks: the
@@ -508,7 +513,8 @@ class Repo:
             raise RuntimeError(f"{cwd} is not inside a git repository")
         self.root = Path(top.stdout.strip())
         self.warnings: list[str] = []
-        self.base = self._base()
+        self.asked_github = self._github_base()
+        self.base = self.asked_github or self._base()
         if fetch:
             done = run(
                 ["git", "fetch", "-q", "origin"], self.root, check=False, timeout=60
@@ -518,15 +524,39 @@ class Repo:
                     f"could not fetch origin; read the last fetched origin/{self.base}"
                 )
         self.ref = f"origin/{self.base}"
-        if (
+        self.has_ref = (
             run(
                 ["git", "rev-parse", "--verify", "-q", self.ref], self.root, check=False
             ).returncode
-            != 0
-        ):
+            == 0
+        )
+
+    def require_ref(self) -> None:
+        """Claiming, releasing and the merged test build on origin's default branch: it must be here."""
+        if self.asked_github is None:
+            self.warnings.append(
+                f"could not ask GitHub for the default branch; used {self.ref}, which may be stale"
+            )
+        if not self.has_ref:
             raise RuntimeError(
                 f"no {self.ref}: run goal in a clone whose origin has a default branch"
             )
+
+    def _github_base(self) -> str | None:
+        """The default branch, as GitHub says it (the local origin/HEAD can be stale), or None."""
+        done = run(
+            ["gh", "repo", "view", "--json", "defaultBranchRef"], self.root, check=False
+        )
+        if done.returncode != 0:
+            return None
+        try:
+            name = json.loads(done.stdout)["defaultBranchRef"]["name"]
+        except (ValueError, KeyError, TypeError):
+            return None
+        ok = isinstance(name, str) and re.fullmatch(
+            r"[A-Za-z0-9_][A-Za-z0-9._/-]*", name
+        )
+        return name if ok else None
 
     def _base(self) -> str:
         done = run(
@@ -563,6 +593,19 @@ class Repo:
             return None
         return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
 
+    def read(self, path: str) -> str | None:
+        """A file in the working copy, line endings and all; None when it isn't a plain file inside the repo."""
+        target = self.root / path
+        try:
+            if (
+                not target.resolve().is_relative_to(self.root.resolve())
+                or not target.is_file()
+            ):
+                return None
+            return target.read_bytes().decode("utf-8", "replace")
+        except OSError:
+            return None
+
     def branches(self) -> dict[str, dt.date]:
         done = run(
             [
@@ -592,14 +635,41 @@ class State:
     todo_path: str
     todo_text: str
     todo: Todo
+    unmerged: list[str] = field(
+        default_factory=list
+    )  # titles marked only in the working copy
+
+
+def _merged_claims(
+    repo: Repo, path: str, settings: Settings
+) -> dict[str, Claim] | None:
+    """Claim marks on origin's default branch by title key, or None when they can't be read."""
+    if repo.asked_github is None:
+        repo.warnings.append(
+            "claims weren't checked: could not ask GitHub for the default branch; answering from the local files"
+        )
+        return None
+    if not repo.has_ref:
+        repo.warnings.append(
+            f"claims weren't checked: no {repo.ref} here; answering from the local files"
+        )
+        return None
+    text = repo.show(path)
+    if text is None:
+        return {}
+    todo = parse_todo(text, settings)
+    return {key(e.title): e.claim for e in todo.entries if e.claim}
 
 
 def load(
-    repo: Repo, today: dt.date, need_goal: bool = True
+    repo: Repo, today: dt.date, need_goal: bool = True, local: bool = False
 ) -> tuple[State | None, dict, list[str]]:
-    """Everything the answer needs, or the list of what is missing."""
+    """Everything the answer needs, or the list of what is missing. `local` reads the working copy and takes the
+    claim marks from origin's default branch; otherwise everything is read from that branch, as a claim needs."""
     missing: list[str] = []
-    readme = repo.show("README.md")
+    read = repo.read if local else repo.show
+    where = "the working copy" if local else repo.ref
+    readme = read("README.md")
     facts = parse_readme(readme or "")
     goal_info: dict = {}
     if facts is None:
@@ -640,16 +710,27 @@ def load(
     limit = wip_limit(facts)
     if limit is None:
         missing.append("no **Work in progress:** line saying `at most <N>`")
-    text = repo.show(SETTINGS_PATH)
+    text = read(SETTINGS_PATH)
     try:
         settings = parse_settings(text) if text is not None else Settings()
     except ValueError as e:
         missing.append(str(e))
         settings = Settings()
-    todo_text = repo.show(path) if path else None
+    todo_text = read(path) if path else None
     if path and todo_text is None:
-        missing.append(f"{path} is not on {repo.ref}")
+        missing.append(f"{path} is not in {where}")
     todo = parse_todo(todo_text or "", settings)
+    unmerged: list[str] = []
+    if local and path and todo_text is not None:
+        merged_claims = _merged_claims(repo, path, settings)
+        if (
+            merged_claims is not None
+        ):  # unchecked: the marks stay as the working copy has them
+            for e in todo.entries:
+                counted = merged_claims.get(key(e.title))
+                if e.claim and e.claim != counted:
+                    unmerged.append(e.title)
+                e.claim = counted
     if todo_text is not None:
         missing += [f"{path} has no {m}" for m in todo.missing]
         for e in todo.entries:
@@ -660,7 +741,7 @@ def load(
     if missing:
         return None, goal_info, missing
     assert path is not None and todo_text is not None
-    return State(repo, facts, settings, path, todo_text, todo), goal_info, []
+    return State(repo, facts, settings, path, todo_text, todo, unmerged), goal_info, []
 
 
 def me_from_env(label: str | None) -> Me:
@@ -690,12 +771,14 @@ NO_NAME = (
 
 def answer(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
     repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
-    state, goal_info, missing = load(repo, today)
+    state, goal_info, missing = load(repo, today, local=True)
+    claims_checked = repo.asked_github is not None and repo.has_ref
     out: dict = {
         "status": "ok",
         "goal": goal_info,
         "warnings": list(repo.warnings),
-        "source": repo.ref,
+        "source": "working copy",
+        "claims_from": repo.ref if claims_checked else None,
     }
     if "frozen" in goal_info:
         out["next"] = {
@@ -707,6 +790,11 @@ def answer(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
     if state is None:
         out.update(status="unclear", missing=missing, next=None)
         return UNCLEAR, out
+    out["unmerged_claims"] = state.unmerged
+    out["warnings"] += [
+        f'the claim mark on "{t}" is not yet merged to {repo.ref}: it is not counted as a claim'
+        for t in state.unmerged
+    ]
     me = me_from_env(args.as_)
     if not me.named:
         out["warnings"].append(
@@ -840,6 +928,7 @@ def change(
 ) -> tuple[int, dict]:
     """Open the tiny pull request that marks (claim) or unmarks (release) one entry."""
     repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
+    repo.require_ref()
     state, _, missing = load(repo, today, need_goal=False)
     if state is None:
         raise Unclear("; ".join(missing) or "this repo is frozen")
@@ -1066,6 +1155,7 @@ def merged(args: argparse.Namespace) -> tuple[int, dict]:
     if name.startswith("-") or not name.strip():
         raise RuntimeError(f"`{name}` is not a branch name")
     repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
+    repo.require_ref()
     refs = [
         ref
         for ref in (f"refs/heads/{name}", f"refs/remotes/origin/{name}")

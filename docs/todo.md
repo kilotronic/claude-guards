@@ -17,7 +17,8 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
   session (a claim closed, a pull request merged, an entry gone); one advisory line.
 - **A reader for GitHub issues on a project board**, for repos that record work there instead of a todo file.
 - **A `report` skill**: progress against `goal`'s finish line, in plain words.
-- **Small gaps in goal found in review.** The claims list ignores a custom branch prefix; the stale match finds
+- **Small gaps in goal found in review.** `gh repo view` follows gh's default repo, which in a fork clone can be the
+  upstream, not origin; a claimed entry whose title is edited locally reads as a mark not yet merged; The claims list ignores a custom branch prefix; the stale match finds
   a short title ("CI") inside any pull request; `goal release` compares the holder's name, not the machine; on
   Python 3.9 and 3.10 a settings value with an apostrophe is refused; a heading inside a code block is read as
   a section, in the todo file and in the README (so this repo's own README example reads as its section); bytes that aren't UTF-8 elsewhere in the todo file are rewritten by a claim; a prose formatter or

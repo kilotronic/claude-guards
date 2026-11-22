@@ -10,7 +10,8 @@ description:
 
 Answer the session-start question in one pass, and end with one concrete recommendation, not a survey.
 The order of work is `goal`'s, not this skill's: `goal` reads the repo's README section
-`## How work runs here` and its todo file on `origin/main`, and answers.
+`## How work runs here` and its todo file in the working copy (claim marks from
+origin's default branch), and answers.
 
 ## Steps
 
