@@ -30,14 +30,22 @@ def _hard_reset(argv: list[str]) -> list[str] | None:
     return None
 
 
-def target_dir(command: str, cwd: str) -> str | None:
-    """The worktree the first hard reset in *command* acts on (after `cd` and `git -C`), or None for no
-    hard reset. Quoted text, a heredoc body or an `echo` never counts."""
+def target_dirs(command: str, cwd: str) -> list[str]:
+    """The worktrees the hard resets in *command* act on (after `cd` and `git -C`). Quoted text, a heredoc
+    body or an `echo` never counts."""
+    out = []
     for parsed in guardlib.parse(command, cwd=cwd):
         dirs = _hard_reset(parsed.argv)
         if dirs is not None:
-            return guardlib.where(parsed, dirs)
-    return None
+            out.append(guardlib.where(parsed, dirs) or cwd)
+    return out
+
+
+def target_dir(command: str, cwd: str) -> str | None:
+    """The first worktree a hard reset in *command* would be refused in, else the first it acts on, or None
+    for no hard reset."""
+    places = target_dirs(command, cwd)
+    return next((p for p in places if refusal(p)), places[0] if places else None)
 
 
 def _git(where: str, *args: str) -> str | None:

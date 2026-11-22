@@ -32,6 +32,8 @@ SUBSTITUTION = "$(...)"
 # Words that start a command without changing which program runs.
 WRAPPERS = {"command", "builtin", "exec", "nohup", "time", "noglob", "nocorrect"}
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
+# Shell options that take the next word as their value.
+SHELL_VALUE_OPTIONS = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
 # Reserved words dropped from the front of a command.
 RESERVED = {"!", "{", "}", "do", "then", "else", "elif", "if", "fi", "esac"}
 STDOUT_REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
@@ -456,10 +458,14 @@ def _inner_script(argv: list[str]) -> str | None:
     if argv[0] == "eval":
         return " ".join(argv[1:])
     if os.path.basename(argv[0]) in SHELLS:
-        for k, word in enumerate(argv[1:], 1):
-            if not word.startswith("-"):
+        words = iter(enumerate(argv[1:], 1))
+        for k, word in words:
+            if word in SHELL_VALUE_OPTIONS:
+                next(words, None)  # its value, such as `pipefail`
+                continue
+            if not word.startswith(("-", "+")):
                 return None
-            if word.startswith("--"):
+            if word.startswith(("--", "+")):
                 continue
             if "c" in word[1:]:
                 return argv[k + 1] if k + 1 < len(argv) else None

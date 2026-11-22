@@ -144,3 +144,10 @@ def test_a_hard_reset_after_a_subshell_cd_acts_in_the_outer_directory(
     repo = _repo(tmp_path / "r", "main")
     command = "(cd /tmp && ls); git reset --hard"
     assert guard.target_dir(command, str(repo)) == str(repo)
+
+
+def test_every_hard_reset_in_a_command_is_checked(tmp_path: Path) -> None:
+    main = _repo(tmp_path / "main", "main")
+    feature = _repo(tmp_path / "feature", "feature")
+    command = f"git -C {feature} reset --hard && git reset --hard"
+    assert guard.target_dir(command, str(main)) == str(main)

@@ -247,3 +247,13 @@ def test_a_cd_inside_a_subshell_stays_inside_it() -> None:
         (["make"], "/elsewhere"),
         (["git", "status"], "/repo"),
     ]
+
+
+def test_bash_options_with_values_do_not_hide_the_script() -> None:
+    for text in (
+        "bash -o pipefail -c 'cat .env'",
+        "bash +o posix -c 'cat .env'",
+        "bash -O extglob -c 'cat .env'",
+        "bash --rcfile /dev/null -c 'cat .env'",
+    ):
+        assert ["cat", ".env"] in argvs(text), text
