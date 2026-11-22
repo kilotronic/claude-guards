@@ -182,11 +182,16 @@ class _Parser:
                     command.refs.append(refs)
             word, refs, started = [], [], False
 
-        def end_command(piped: bool = False) -> None:
+        def end_command(piped: bool = False, subshell: bool = False) -> None:
+            """*subshell*: the command ran in a subshell (before a pipe, or sent to the background), so
+            its `cd` ends with it."""
             nonlocal command
             end_word()
             command.piped = piped
+            outer = (self.cwd, self.oldcwd)
             self.finish(command)
+            if subshell:
+                self.cwd, self.oldcwd = outer
             command = Command(substituted=substituted, first=len(self.out))
 
         while self.i < len(self.text):
@@ -259,10 +264,10 @@ class _Parser:
                 two = self.text[self.i : self.i + 2]
                 if two in ("&&", "||", ";;", "|&"):
                     self.i += 2
-                    end_command(piped=two == "|&")
+                    end_command(piped=two == "|&", subshell=two == "|&")
                 else:
                     self.i += 1
-                    end_command(piped=ch == "|")
+                    end_command(piped=ch == "|", subshell=ch in "|&")
             elif ch == "(":
                 end_command()
                 self.i += 1
@@ -468,7 +473,14 @@ def _inner_script(argv: list[str]) -> str | None:
             if word.startswith(("--", "+")):
                 continue
             if "c" in word[1:]:
-                return argv[k + 1] if k + 1 < len(argv) else None
+                rest = argv[k + 1 :]
+                if rest[:1] == ["--"]:
+                    rest = rest[1:]
+                return rest[0] if rest else None
+            if "o" in word[1:] or "O" in word[1:]:
+                next(
+                    words, None
+                )  # `-euo pipefail`: the cluster's `o` takes the next word
     return None
 
 

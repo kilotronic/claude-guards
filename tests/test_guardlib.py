@@ -257,3 +257,31 @@ def test_bash_options_with_values_do_not_hide_the_script() -> None:
         "bash --rcfile /dev/null -c 'cat .env'",
     ):
         assert ["cat", ".env"] in argvs(text), text
+
+
+def _cwds(text: str) -> list[tuple[list[str], str | None]]:
+    return [(c.argv[:2], c.cwd) for c in guardlib.parse(text, cwd="/repo")]
+
+
+def test_a_cd_before_a_pipe_runs_in_a_subshell() -> None:
+    assert _cwds("cd /elsewhere | cat; git status")[-1] == (["git", "status"], "/repo")
+
+
+def test_a_cd_sent_to_the_background_runs_in_a_subshell() -> None:
+    assert _cwds("cd /elsewhere & git status")[-1] == (["git", "status"], "/repo")
+
+
+def test_a_cd_after_and_and_still_carries_over() -> None:
+    assert _cwds("cd /elsewhere && git status")[-1] == (["git", "status"], "/elsewhere")
+
+
+def test_a_short_option_cluster_with_o_takes_a_value() -> None:
+    assert ["git", "stash"] in argvs("bash -euo pipefail -c 'git stash'")
+
+
+def test_bash_c_then_double_dash_runs_the_next_word() -> None:
+    assert ["git", "commit", "-m", "x"] in argvs("bash -c -- 'git commit -m x'")
+
+
+def test_bash_lc_runs_its_script() -> None:
+    assert ["git", "stash"] in argvs("bash -lc 'git stash'")
