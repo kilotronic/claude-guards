@@ -8,11 +8,14 @@ polls as fast as it sleeps; both burn the GitHub API rate limit shared by every 
 watch with `--interval 60` or more is the way to wait. Refused: such a watch without that interval; a
 `while`/`until`/`repeat` loop that runs `gh` (except `... | while read`, which walks a list once); a `for`
 loop whose `gh` call ignores the loop variable (the same query each pass); `watch ... gh ...`. One-off `gh` calls pass.
+The loop variable is followed through the body: into a variable assigned from it, into `$1`... after
+`set -- $var`, and into the names a `read ... <<< "$var"` reads.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -21,6 +24,10 @@ import guardlib
 RULE = "no-github-polling"
 MIN_INTERVAL = 60
 TOOLS = {"Bash", "Monitor"}
+# A variable a word expands: `$x`, `${x}`, `${x%...}`; not `${#x}`, its length.
+REF = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)")
+# A positional parameter: `$1`, `${2}`, `$@`, `$*`.
+POSITIONAL = re.compile(r"\$\{?[1-9@*]")
 
 
 def interval(args: list[str]) -> int | None:
@@ -55,15 +62,42 @@ def polls(loop: guardlib.Loop, commands: list[guardlib.Command]) -> bool:
         or loop.kind == "repeat"
     ):
         return True
-    walks = set(loop.vars)
+    body = [c for c in commands if loop in c.loop_refs]
+    walks, positional = carried(set(loop.vars), body)
 
     def uses(command: guardlib.Command) -> bool:
-        return bool(walks.intersection(v for refs in command.refs for v in refs))
+        if walks.intersection(v for refs in command.refs for v in refs):
+            return True
+        return positional and any(POSITIONAL.search(w) for w in command.argv[1:])
 
     # A `cd "$d"` in the body moves each pass to another repo.
-    if any(c.argv[:1] == ["cd"] and uses(c) for c in commands if loop in c.loop_refs):
+    if any(c.argv[:1] == ["cd"] and uses(c) for c in body):
         return False
     return any(not uses(c) for c in calls)
+
+
+def carried(names: set[str], body: list[guardlib.Command]) -> tuple[set[str], bool]:
+    """The variables that change with the loop variables *names* in a loop's *body*, and whether the
+    positional parameters do (`set -- $var`). Followed until nothing new, since the body runs every pass."""
+    names, positional = set(names), False
+    while True:
+        before = (len(names), positional)
+        for command in body:
+            refs = {v for word in command.refs for v in word}
+            for text in command.assignments:
+                name, _, value = text.partition("=")
+                if names.intersection(REF.findall(value)):
+                    names.add(name.rstrip("+").split("[")[0])
+            argv = command.argv
+            if argv[:1] == ["set"] and names & refs:
+                positional = True
+            if argv[:1] == ["read"] and any(
+                op.endswith("<<<") and names.intersection(REF.findall(target))
+                for op, target in command.redirects
+            ):
+                names.update(w for w in argv[1:] if guardlib.NAME.fullmatch(w))
+        if (len(names), positional) == before:
+            return names, positional
 
 
 def watches_gh(argv: list[str]) -> bool:
