@@ -4,6 +4,11 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 
 ## Defects
 
+- **The stash guard doesn't say why a `no-commit-on-main` override was ignored.** With `no-stash` locked, a
+  repo's `no-commit-on-main` override no longer turns the guard off, but the refusal's note only reads
+  `no-stash`, so it gives no reason. And a repo that turns `no-commit-on-main` off can keep the stash guard
+  on only by locking `no-stash` for every repo. Shape: a note naming the old id.
+
 - **The ours-theirs guard's binary exception has narrow gaps.** A merge driver set by `merge.default` in git
   config shows as `unspecified`, so the file is judged by its content; a text conflict whose markers were
   removed by hand and whose path was then marked `binary` passes; and the marker scan reads each named file
