@@ -471,7 +471,7 @@ def _inner_script(argv: list[str]) -> str | None:
         k += 1
         if values:
             values -= 1
-        elif word == "--":
+        elif word in ("--", "-"):  # a lone `-` also ends the options
             break
         elif word in ("--rcfile", "--init-file"):
             values = 1

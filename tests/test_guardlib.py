@@ -295,6 +295,8 @@ def test_every_spelling_of_a_bash_script_is_found() -> None:
         "bash -c -e 'git stash'",
         "bash -c -o pipefail 'git stash'",
         "bash -c -- 'git stash'",
+        "bash -c - 'git stash'",
+        "sh -ec - 'git stash'",
     ):
         assert ["git", "stash"] in argvs(text), text
 
