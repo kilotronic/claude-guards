@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-guards",
+  "description": "Claude Code hooks that stop risky git, GitHub and shell commands",
+  "owner": {
+    "name": "Kilotronic"
+  },
+  "plugins": [
+    {
+      "name": "guards",
+      "description": "Hooks that stop risky git, GitHub and shell commands an agent is about to run, and say what to do instead",
+      "source": "./plugins/guards"
+    }
+  ]
+}
