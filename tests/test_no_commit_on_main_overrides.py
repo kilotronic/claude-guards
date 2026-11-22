@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 
-"""The four guards behind `no-commit-on-main` honour the overrides file for that id."""
+"""The three guards behind `no-commit-on-main` honour the overrides file for that id. The stash guard,
+which still honours it too, is in test_no_stash_overrides.py."""
 
 from __future__ import annotations
 
@@ -33,7 +34,6 @@ def _repo(path: Path, branch: str = "main") -> Path:
 CASES = [
     ("guard-commit-on-main.py", "git commit -m x"),
     ("guard-no-verify.py", "git commit --no-verify -m x"),
-    ("guard-shared-stash.py", "git stash"),
     ("guard-hard-reset.py", "git reset --hard HEAD"),
 ]
 
@@ -69,13 +69,3 @@ def test_one_repos_override_does_not_cover_the_repo_the_command_acts_in(
     assert bash(script, f"cd {other} && {command}", cwd=off)[0] == 2
     git_c = command.replace("git ", f"git -C {other} ", 1)
     assert bash(script, git_c, cwd=off)[0] == 2
-
-
-def test_a_stash_aimed_at_another_repo_by_git_dir_is_still_refused(
-    tmp_path: Path,
-) -> None:
-    off = _repo(tmp_path / "off")
-    other = _repo(tmp_path / "other")
-    turn_off(off, RULE)
-    command = f"git --git-dir={other}/.git --work-tree={other} stash"
-    assert bash("guard-shared-stash.py", command, cwd=off)[0] == 2

@@ -31,7 +31,7 @@ with its own name from its `plugin.json`.
 
 | Hook                        | Rule id                    | Refuses                                                                                                                                                                                                                                                                       |
 | --------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `guard-shared-stash.py`     | `no-commit-on-main`        | `git stash`. A repo has one stash, so agents working in parallel take each other's work.                                                                                                                                                                                      |
+| `guard-shared-stash.py`     | `no-stash`                 | `git stash`. A repo has one stash, so agents working in parallel take each other's work.                                                                                                                                                                                      |
 | `guard-hard-reset.py`       | `no-commit-on-main`        | `git reset --hard` on `main`/`master`, or over uncommitted changes.                                                                                                                                                                                                           |
 | `guard-no-verify.py`        | `no-commit-on-main`        | `git commit --no-verify` with new content. Rewording or squashing commits that already passed the hooks is allowed.                                                                                                                                                           |
 | `guard-commit-on-main.py`   | `no-commit-on-main`        | `git commit` in a worktree that is on `main`/`master`.                                                                                                                                                                                                                        |
@@ -77,8 +77,10 @@ for a group of repos, in an overrides file:
 - `no-secret-print`, `no-admin-merge` and `no-github-polling` are never turned off: their guards ignore
   overrides. To stop overrides turning other rules off, list their ids under `"_locked": ["rule-id", ...]` in
   the same file.
-- One id can cover several guards: `no-commit-on-main` turns off the stash, hard-reset, `--no-verify` and
-  commit-on-main guards together, and `main-checkout` the edit and branch-switch guards.
+- One id can cover several guards: `no-commit-on-main` turns off the hard-reset, `--no-verify` and
+  commit-on-main guards together, and `main-checkout` the edit and branch-switch guards. The stash guard
+  has had its own id, `no-stash`, since guards 1.1.1; `no-commit-on-main` off still turns it off too, unless
+  `no-stash` is locked.
 - A `.main-edit-ok` file at a repo's root also lets that repo edit, switch branches and commit in its main
   checkout (`block-main-edits.py`, `guard-branch-switch.py` and `guard-commit-on-main.py`).
 

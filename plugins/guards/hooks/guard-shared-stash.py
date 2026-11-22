@@ -5,7 +5,8 @@
 
 `refs/stash` is ONE ref for the whole repository and agents run here in parallel,
 so a concurrent stash races and a `pop` can carry off another agent's payload.
-`no-commit-on-main` off in the overrides file turns it off for a repo.
+`no-stash` off in the overrides file turns it off for a repo. So does `no-commit-on-main`, the id that
+covered this guard before it had its own, unless `no-stash` is locked.
 """
 
 from __future__ import annotations
@@ -17,7 +18,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import guardlib
 
-RULE = "no-commit-on-main"
+RULE = "no-stash"
+# The id this guard reported before it had its own: an override of it still counts.
+OLD_RULE = "no-commit-on-main"
 
 READS = (["list"], ["show"], ["apply"])
 MESSAGE = (
@@ -60,6 +63,13 @@ def stash_places(payload: dict) -> list[str | None]:
     return places
 
 
+def off(place: str | None) -> bool:
+    """Whether the overrides file turns the guard off for the repo at *place*, by either id."""
+    if guardlib.off(RULE, place):
+        return True
+    return RULE not in guardlib.locked_rules() and guardlib.off(OLD_RULE, place)
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -68,11 +78,9 @@ def main() -> int:
     if not isinstance(payload, dict):
         return 0
     places = stash_places(payload)
-    if not places or all(guardlib.off(RULE, place) for place in places):
+    if not places or all(off(place) for place in places):
         return 0
-    return guardlib.refuse(
-        RULE, MESSAGE, next((p for p in places if not guardlib.off(RULE, p)), None)
-    )
+    return guardlib.refuse(RULE, MESSAGE, next((p for p in places if not off(p)), None))
 
 
 if __name__ == "__main__":
