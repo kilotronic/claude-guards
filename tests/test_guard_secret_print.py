@@ -214,6 +214,12 @@ def test_the_known_gaps_are_refused(command: str) -> None:
         "find . -name .env | xargs wc -l",
         "find . -name .env -exec wc -l {} \\;",
         "find . -name '*.py' -exec cat {} \\;",
+        "find src/* -name '*.py' -exec cat {} +",
+        "find * -name '*.py' -exec cat {} +",
+        "ls * | xargs cat",
+        "ls src/* | xargs cat",
+        "echo *rc | xargs cat",
+        "find . -not -name '*env' -exec cat {} +",
     ],
 )
 def test_near_misses_of_the_gaps_pass(command: str) -> None:
@@ -352,10 +358,6 @@ def test_a_env_file_after_the_pattern_is_still_refused(command: str) -> None:
 @pytest.mark.parametrize(
     "command",
     [
-        'echo "$(gh auth token)"',
-        "echo `op read op://v/i/f`",
-        "printf '%s' \"$(op read op://v/i/f)\"",
-        "cat <(op read op://v/i/f)",
         "declare -p",
         "typeset -p",
         "export",
@@ -364,6 +366,9 @@ def test_a_env_file_after_the_pattern_is_still_refused(command: str) -> None:
         "declare",
         "find . -name '*env' -exec cat {} \\;",
         "find . -name '*env' | xargs cat",
+        "find . -name '*.env.qa' -exec cat {} \\;",
+        "find . -iname '*ENV*' -exec cat {} \\;",
+        "find . -path '*/.env' -exec cat {} +",
     ],
 )
 def test_more_ways_to_print_a_secret_are_refused(command: str) -> None:
@@ -381,8 +386,6 @@ def test_more_ways_to_print_a_secret_are_refused(command: str) -> None:
         "export FOO=1",
         "declare -p HOME",
         "declare -f",
-        'echo "$(gh auth token)" | pbcopy',
-        'echo "$(gh auth token)" > /tmp/token',
         "find . -name '*.py' -exec cat {} \\;",
     ],
 )

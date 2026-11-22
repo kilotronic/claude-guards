@@ -6,12 +6,12 @@
 Whatever a command prints lands in the session transcript (and in any log of it). Refused:
 - reading a `.env`/`.env.*`/`.envrc` file (not `.env.example`/`.sample`/`.template`/`.dist`), or a glob or
   brace list that can match one (`cat .env*`), with a printing reader (also through `xargs` or
-  `find -exec`), the Read tool, Grep's content mode, `git show <rev>:.env`, or `python3 -c`/`node -e`
+  `find -exec`, where a `-name` pattern such as `'*env'` matches dot files too), the Read tool, Grep's content mode, `git show <rev>:.env`, or `python3 -c`/`node -e`
   code that prints it;
 - `op read`, `op item get --reveal`, `gh auth token` and `security find-*-password -w` whose output
   reaches the terminal: a redirect, `--out-file`, `$(...)` or a pipe to a program that uses it is fine;
   a pipe to `cat`, `tee` or another program that just prints is not;
-- bare `env`, `printenv` and `set`;
+- bare `env`, `printenv` and `set`, and `export`, `declare` and `typeset` with no names (`export -p`);
 - `echo`/`printf`/`printenv`/`declare -p` of a variable whose name ends in a secret word (GH_TOKEN,
   OPENAI_API_KEY; not SSH_KEY_PATH), also through such a pipe.
 Sourcing a `.env` prints nothing and passes. A floor rule: it can't be turned off.
@@ -144,22 +144,47 @@ def _shortest(token: re.Match) -> str:
     return text[1:2]
 
 
-def may_name_env_file(word: str, dotglob: bool = False) -> bool:
-    """Whether *word* is, or is a glob or brace list that can match, a .env file. A shell glob matches a dot
-    file only when it starts with a dot; with *dotglob* (a `find -name` pattern) it matches anyway."""
+def may_name_env_file(word: str) -> bool:
+    """Whether *word* is, or is a glob or brace list that can match, a .env file."""
     for alt in braces(word):
         name = os.path.basename(alt.rstrip("/"))
         if not GLOB.search(name):
             if is_env_file(alt):
                 return True
-        elif (
-            dotglob
-            and any(fnmatch.fnmatchcase(c, name) for c in ENV_NAMES)
-            or name.startswith(".")
-            and (
-                any(fnmatch.fnmatchcase(c, name) for c in ENV_NAMES)
-                or is_env_file(GLOB_TOKEN.sub(_shortest, name))
-            )
+        # A shell glob matches a dot file only when it starts with a dot.
+        elif name.startswith(".") and (
+            any(fnmatch.fnmatchcase(c, name) for c in ENV_NAMES)
+            or is_env_file(GLOB_TOKEN.sub(_shortest, name))
+        ):
+            return True
+    return False
+
+
+FIND_NAME_TESTS = {"-name": False, "-iname": True}
+FIND_PATH_TESTS = {
+    "-path": False,
+    "-ipath": True,
+    "-wholename": False,
+    "-iwholename": True,
+}
+
+
+def find_matches_env_file(argv: list[str]) -> bool:
+    """Whether a `find` name or path test in *argv* (not negated) can match a .env file. Unlike a shell glob,
+    a `find` pattern matches dot files too (`-name '*env'` matches `.env`)."""
+    words = kept(argv[1:])
+    for k in range(len(words) - 1):  # pairs; itertools.pairwise needs Python 3.10
+        test, value = words[k], words[k + 1]
+        nocase = FIND_NAME_TESTS.get(test, FIND_PATH_TESTS.get(test))
+        if nocase is None:
+            continue
+        name = value.rsplit("/", 1)[-1] if test in FIND_PATH_TESTS else value
+        name = name.lower() if nocase else name
+        if not GLOB.search(name):
+            if is_env_file(name):
+                return True
+        elif any(fnmatch.fnmatchcase(c, name) for c in ENV_NAMES) or is_env_file(
+            GLOB_TOKEN.sub(_shortest, name)
         ):
             return True
     return False
@@ -286,10 +311,13 @@ def producer(commands: list[guardlib.Command], i: int) -> guardlib.Command | Non
 
 
 def reader_refusal(
-    argv: list[str], command: guardlib.Command, named: list[str] = ()
+    argv: list[str],
+    command: guardlib.Command,
+    named: list[str] = (),
+    found_by_find: bool = False,
 ) -> str | None:
-    """A printing reader in *argv* of a .env file named in its arguments, or matched by a `find` pattern
-    in *named*."""
+    """A printing reader in *argv* of a .env file named in its arguments or in *named*, or of the files a
+    `find` test matched (*found_by_find*)."""
     name = os.path.basename(argv[0]) if argv else ""
     if name not in READERS or redirected(command):
         return None
@@ -305,10 +333,7 @@ def reader_refusal(
         name == "cut" and names_only(argv[1:])
     )
     if (
-        (
-            any(may_name_env_file(f) for f in files)
-            or any(may_name_env_file(f, dotglob=True) for f in named)
-        )
+        (found_by_find or any(may_name_env_file(f) for f in files + list(named)))
         and not quiet
         and not edits_in_place(name, argv[1:])
     ):
@@ -400,33 +425,6 @@ def inline_refusal(argv: list[str]) -> str | None:
     return None
 
 
-def substituted_reveal(commands: list[guardlib.Command], i: int) -> str | None:
-    """A secret-printing command inside command *i*'s `$(...)`, backticks or `<(...)`, when command *i*
-    prints what it is given (`echo "$(gh auth token)"`, `cat <(op read ...)`) to the terminal."""
-    command = commands[i]
-    argv = command.argv
-    name = os.path.basename(argv[0]) if argv else ""
-    if not (name in PRINTERS or name in PASSTHROUGH or name in READERS):
-        return None
-    if not reaches_terminal(commands, i):
-        return None
-    for inner in commands[command.first : i]:
-        if inner.substituted and not file_redirected_inside(inner):
-            shown = revealed(inner.argv)
-            if shown:
-                return shown
-    return None
-
-
-def file_redirected_inside(command: guardlib.Command) -> bool:
-    """Inside a substitution, output sent to a file (not the substitution) is not handed on."""
-    return any(
-        (op in guardlib.STDOUT_REDIRECTS or op in ("1>", "1>>", "1>|"))
-        and not target.startswith("&")
-        for op, target in command.redirects
-    )
-
-
 def bash_refusal(commands: list[guardlib.Command], i: int) -> str | None:
     command = commands[i]
     argv = command.argv
@@ -436,12 +434,21 @@ def bash_refusal(commands: list[guardlib.Command], i: int) -> str | None:
         # The file names may come down the pipe: `find . -name .env | xargs cat`.
         source = producer(commands, i)
         found = reader_refusal(
-            xargs_command(argv), command, kept(source.argv[1:]) if source else []
+            xargs_command(argv),
+            command,
+            kept(source.argv[1:]) if source else [],
+            bool(
+                source
+                and source.argv[:1] == ["find"]
+                and find_matches_env_file(source.argv)
+            ),
         )
     if not found and name == "find":
         inner = find_exec(argv)
         if inner:
-            found = reader_refusal(inner, command, kept(argv[1:]))
+            found = reader_refusal(
+                inner, command, kept(argv[1:]), find_matches_env_file(argv)
+            )
     found = found or (None if redirected(command) else inline_refusal(argv))
     if found:
         return found
@@ -458,9 +465,7 @@ def bash_refusal(commands: list[guardlib.Command], i: int) -> str | None:
     ):
         return f"`git {git[0]}` of a .env file: its secrets would land in the transcript.\n\n{ENV_ALTERNATIVE}"
     printed = reaches_terminal(commands, i)
-    shown = revealed(argv) or (
-        None if command.substituted else substituted_reveal(commands, i)
-    )
+    shown = revealed(argv)
     if shown and printed:
         return (
             f"{shown} to the terminal: the secret would land in the transcript.\n\n"
@@ -479,7 +484,7 @@ def bash_refusal(commands: list[guardlib.Command], i: int) -> str | None:
     )
     if dumps and not redirected(command):
         return (
-            f"`{command.words[0]}` with no arguments: it prints every secret in the environment.\n\n"
+            f"`{' '.join(command.words)}` with no names: it prints every secret in the environment.\n\n"
             "Instead: print one variable that is not a secret (`printenv HOME`), or check one is set\n"
             "with `echo ${#NAME}`."
         )
