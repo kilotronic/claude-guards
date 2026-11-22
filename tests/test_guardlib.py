@@ -285,3 +285,19 @@ def test_bash_c_then_double_dash_runs_the_next_word() -> None:
 
 def test_bash_lc_runs_its_script() -> None:
     assert ["git", "stash"] in argvs("bash -lc 'git stash'")
+
+
+def test_every_spelling_of_a_bash_script_is_found() -> None:
+    for text in (
+        "bash -oc pipefail 'git stash'",
+        "bash -euoc pipefail 'git stash'",
+        "bash +euo pipefail -c 'git stash'",
+        "bash -c -e 'git stash'",
+        "bash -c -o pipefail 'git stash'",
+        "bash -c -- 'git stash'",
+    ):
+        assert ["git", "stash"] in argvs(text), text
+
+
+def test_a_shell_running_a_script_file_is_not_a_c_string() -> None:
+    assert argvs("bash -e build.sh") == [["bash", "-e", "build.sh"]]
