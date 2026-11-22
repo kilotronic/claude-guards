@@ -20,5 +20,5 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 - **Small gaps in goal found in review.** The claims list ignores a custom branch prefix; the stale match finds
   a short title ("CI") inside any pull request; `goal release` compares the holder's name, not the machine; on
   Python 3.9 and 3.10 a settings value with an apostrophe is refused; a heading inside a code block is read as
-  a section; bytes that aren't UTF-8 elsewhere in the todo file are rewritten by a claim; a prose formatter or
+  a section, in the todo file and in the README (so this repo's own README example reads as its section); bytes that aren't UTF-8 elsewhere in the todo file are rewritten by a claim; a prose formatter or
   line-length rule can move or reject the mark at the end of a long line.
