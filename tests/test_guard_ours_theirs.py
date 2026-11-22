@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 import pytest
 from hookrun import bash, turn_off
 
@@ -65,3 +68,78 @@ def test_the_settings_of_the_repo_the_command_acts_in_apply(tmp_path) -> None:
     turn_off(a, "no-wholesale-ours-theirs", "generated files")
     assert bash(SCRIPT, "git checkout --ours .", cwd=a) == (0, "")
     assert bash(SCRIPT, f"cd {b} && git checkout --ours .", cwd=a)[0] == 2
+
+
+def _conflicted(path: Path) -> Path:
+    """A repo mid-merge with a conflict in a binary font, a text file, and a text file marked binary."""
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True)
+
+    def write(side: bytes) -> None:
+        (path / "fonts").mkdir(exist_ok=True)
+        (path / "fonts" / "a.woff2").write_bytes(b"wOF2\x00\x01" + side)
+        (path / "notes.txt").write_text(f"line {side.decode()}\n")
+        (path / "data.bin").write_text(f"plain {side.decode()}\n")
+
+    path.mkdir()
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    (path / ".gitattributes").write_text("data.bin binary\n")
+    write(b"base")
+    git("add", ".")
+    git("commit", "-q", "--no-verify", "-m", "base")
+    git("checkout", "-q", "-b", "other")
+    write(b"theirs")
+    git("commit", "-q", "--no-verify", "-am", "theirs")
+    git("checkout", "-q", "main")
+    write(b"ours")
+    git("commit", "-q", "--no-verify", "-am", "ours")
+    subprocess.run(
+        ["git", "-C", str(path), "merge", "other"], check=False, capture_output=True
+    )
+    return path
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git checkout --theirs fonts/a.woff2",
+        "git checkout --theirs -- fonts/a.woff2",
+        "git restore --ours fonts/a.woff2",
+        "git restore --source=HEAD --theirs fonts/a.woff2",
+        "git checkout --ours data.bin fonts/a.woff2",
+        "cd fonts && git checkout --theirs a.woff2",
+    ],
+)
+def test_one_side_of_a_binary_file_passes(tmp_path: Path, command: str) -> None:
+    repo = _conflicted(tmp_path / "r")
+    assert bash(SCRIPT, command, cwd=repo) == (0, "")
+
+
+def test_a_binary_file_in_another_repo_by_c_passes(tmp_path: Path) -> None:
+    repo = _conflicted(tmp_path / "r")
+    command = f"git -C {repo} checkout --theirs fonts/a.woff2"
+    assert bash(SCRIPT, command, cwd=tmp_path) == (0, "")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git checkout --theirs notes.txt",
+        "git checkout --theirs fonts/a.woff2 notes.txt",
+        "git checkout --theirs -- .",
+        "git checkout --theirs fonts",
+        "git checkout --theirs",
+        "git checkout --theirs missing.woff2",
+        "git checkout --theirs '*.woff2'",
+        "git restore --ours -s fonts/a.woff2 notes.txt",
+        "git merge -X theirs other",
+    ],
+)
+def test_a_text_file_or_anything_wider_is_still_refused(
+    tmp_path: Path, command: str
+) -> None:
+    repo = _conflicted(tmp_path / "r")
+    assert bash(SCRIPT, command, cwd=repo)[0] == 2
