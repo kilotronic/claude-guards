@@ -23,26 +23,16 @@ import guardlib
 RULE = "main-checkout"
 LEGACY_OPT_OUT = ".main-edit-ok"
 TRUNKS = {"main", "master"}
-SWITCH_VALUE_FLAGS = {
-    "-c",
-    "-C",
-    "--create",
-    "--force-create",
-    "--orphan",
-    "-t",
-    "--track",
+# Options that name the branch to create; a short one may carry it attached (`-bnew`), a long one after `=`.
+CREATE = {
+    "switch": {"-c", "-C", "--create", "--force-create", "--orphan"},
+    "checkout": {"-b", "-B", "--orphan"},
 }
-CHECKOUT_CREATE = {"-b", "-B", "--orphan"}
-FILE_MODE = {
-    "-p",
-    "--patch",
-    "--ours",
-    "--theirs",
-    "--pathspec-from-file",
-    "-m",
-    "--merge",
-    "--conflict",
-}
+# `git switch -t <start>`: the start point follows, and switching to it creates a local branch.
+SWITCH_TRACK = {"-t", "--track"}
+# File modes: with these, `git checkout` only restores files. (`-m`, `--merge` and `--conflict` also work
+# with a branch, so the operands decide.)
+FILE_MODE = {"-p", "--patch", "--ours", "--theirs", "--pathspec-from-file"}
 
 
 def _git(place: str, *args: str) -> str | None:
@@ -75,24 +65,35 @@ def is_main_checkout(place: str | None) -> bool:
     )
 
 
+def _created(sub: str, word: str, words) -> str | None:
+    """The branch *word* (an option of `git <sub>`) creates, or None when it creates none."""
+    flags = CREATE[sub]
+    if word in flags:
+        return next(words, "")
+    flag, eq, value = word.partition("=")
+    if eq and flag in flags and flag.startswith("--"):
+        return value
+    if len(word) > 2 and word[1] != "-" and word[:2] in flags:
+        return word[2:]
+    return None
+
+
 def switches(sub: str, args: list[str], place: str) -> bool:
     """Whether `git <sub> <args>` moves the checkout to another branch or commit."""
     positional: list[str] = []
+    paths: list[str] = []
     words = iter(args)
     for word in words:
         if word == "--":
-            if sub == "checkout":
-                return any(flag in CHECKOUT_CREATE for flag in args[: args.index("--")])
+            paths = list(words)
             break
-        creates = (sub == "switch" and word in SWITCH_VALUE_FLAGS) or (
-            sub == "checkout" and word in CHECKOUT_CREATE
-        )
-        if creates:
+        created = _created(sub, word, words)
+        if created is not None:
             # `git checkout -B main origin/main` resets the trunk and stays on it.
+            return created not in TRUNKS
+        if sub == "switch" and word in SWITCH_TRACK:
             return next(words, None) not in TRUNKS
-        if sub == "checkout" and word.startswith("--orphan="):
-            return True
-        if sub == "checkout" and (word in FILE_MODE or word.startswith("--conflict=")):
+        if sub == "checkout" and word in FILE_MODE:
             return False
         if word == "--detach" or word == "-":
             return True
@@ -100,8 +101,9 @@ def switches(sub: str, args: list[str], place: str) -> bool:
             positional.append(word)
     if sub == "switch":
         return bool(positional) and positional[0] not in TRUNKS
-    if len(positional) != 1 or positional[0] in TRUNKS:
-        return False  # nothing named, the trunk, or `<tree> <paths>`
+    # `git checkout <branch> --` switches; `<tree> -- <paths>` and `<tree> <paths>` restore files.
+    if paths or len(positional) != 1 or positional[0] in TRUNKS:
+        return False
     name = positional[0]
     if _git(place, "rev-parse", "--verify", "--quiet", name + "^{commit}") is not None:
         return True

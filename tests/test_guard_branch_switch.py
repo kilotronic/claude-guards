@@ -187,3 +187,47 @@ def test_cd_dash_with_no_earlier_cd_stays_in_the_main_checkout(
 ) -> None:
     main, _ = repos
     assert bash(SCRIPT, "cd - && git checkout -b x", cwd=main)[0] == 2
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git checkout feature --",
+        "git checkout -m feature",
+        "git checkout --merge feature",
+        "git checkout --conflict=diff3 feature",
+        "git checkout -bnew",
+        "git checkout -Bnew",
+        "git checkout --orphan=gh-pages",
+        "git switch -cnew",
+        "git switch -Cnew",
+        "git switch --create=new",
+        "git switch --force-create=new",
+        "git switch --orphan=gh-pages",
+    ],
+)
+def test_more_spellings_of_a_switch_are_refused(
+    repos: tuple[Path, Path], command: str
+) -> None:
+    main, _ = repos
+    rc, err = bash(SCRIPT, command, cwd=main)
+    assert rc == 2, (command, err)
+    assert "[guards:main-checkout]" in err
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git checkout -m f.txt",
+        "git checkout --merge -- f.txt",
+        "git checkout feature -- f.txt",
+        "git checkout -Bmain origin/main",
+        "git switch --create=main",
+        "git checkout main --",
+    ],
+)
+def test_more_restores_and_trunk_returns_pass(
+    repos: tuple[Path, Path], command: str
+) -> None:
+    main, _ = repos
+    assert bash(SCRIPT, command, cwd=main) == (0, ""), command
