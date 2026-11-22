@@ -6,12 +6,12 @@
 Whatever a command prints lands in the session transcript (and in any log of it). Refused:
 - reading a `.env`/`.env.*`/`.envrc` file (not `.env.example`/`.sample`/`.template`/`.dist`), or a glob or
   brace list that can match one (`cat .env*`), with a printing reader (also through `xargs` or
-  `find -exec`), the Read tool, Grep's content mode, `git show <rev>:.env`, or `python3 -c`/`node -e`
+  `find -exec`, where a `-name` pattern such as `'*env'` matches dot files too), the Read tool, Grep's content mode, `git show <rev>:.env`, or `python3 -c`/`node -e`
   code that prints it;
 - `op read`, `op item get --reveal`, `gh auth token` and `security find-*-password -w` whose output
   reaches the terminal: a redirect, `--out-file`, `$(...)` or a pipe to a program that uses it is fine;
   a pipe to `cat`, `tee` or another program that just prints is not;
-- bare `env`, `printenv` and `set`;
+- bare `env`, `printenv` and `set`, and `export`, `declare` and `typeset` with no names (`export -p`);
 - `echo`/`printf`/`printenv`/`declare -p` of a variable whose name ends in a secret word (GH_TOKEN,
   OPENAI_API_KEY; not SSH_KEY_PATH), also through such a pipe.
 Sourcing a `.env` prints nothing and passes. A floor rule: it can't be turned off.
@@ -160,6 +160,36 @@ def may_name_env_file(word: str) -> bool:
     return False
 
 
+FIND_NAME_TESTS = {"-name": False, "-iname": True}
+FIND_PATH_TESTS = {
+    "-path": False,
+    "-ipath": True,
+    "-wholename": False,
+    "-iwholename": True,
+}
+
+
+def find_matches_env_file(argv: list[str]) -> bool:
+    """Whether a `find` name or path test in *argv* (not negated) can match a .env file. Unlike a shell glob,
+    a `find` pattern matches dot files too (`-name '*env'` matches `.env`)."""
+    words = kept(argv[1:])
+    for k in range(len(words) - 1):  # pairs; itertools.pairwise needs Python 3.10
+        test, value = words[k], words[k + 1]
+        nocase = FIND_NAME_TESTS.get(test, FIND_PATH_TESTS.get(test))
+        if nocase is None:
+            continue
+        name = value.rsplit("/", 1)[-1] if test in FIND_PATH_TESTS else value
+        name = name.lower() if nocase else name
+        if not GLOB.search(name):
+            if is_env_file(name):
+                return True
+        elif any(fnmatch.fnmatchcase(c, name) for c in ENV_NAMES) or is_env_file(
+            GLOB_TOKEN.sub(_shortest, name)
+        ):
+            return True
+    return False
+
+
 def quiet_grep(args: list[str]) -> bool:
     for word in args:
         if word in QUIET_GREP_LONG:
@@ -281,9 +311,13 @@ def producer(commands: list[guardlib.Command], i: int) -> guardlib.Command | Non
 
 
 def reader_refusal(
-    argv: list[str], command: guardlib.Command, named: list[str] = ()
+    argv: list[str],
+    command: guardlib.Command,
+    named: list[str] = (),
+    found_by_find: bool = False,
 ) -> str | None:
-    """A printing reader in *argv* of a .env file named in its arguments or in *named*."""
+    """A printing reader in *argv* of a .env file named in its arguments or in *named*, or of the files a
+    `find` test matched (*found_by_find*)."""
     name = os.path.basename(argv[0]) if argv else ""
     if name not in READERS or redirected(command):
         return None
@@ -291,7 +325,7 @@ def reader_refusal(
         grep_files(name, argv[1:])
         if name in GREPS
         else [w for w in argv[1:] if not w.startswith("-")]
-    ) + list(named)
+    )
     files += [
         target for op, target in command.redirects if op.lstrip("0123456789") == "<"
     ]
@@ -299,7 +333,7 @@ def reader_refusal(
         name == "cut" and names_only(argv[1:])
     )
     if (
-        any(may_name_env_file(f) for f in files)
+        (found_by_find or any(may_name_env_file(f) for f in files + list(named)))
         and not quiet
         and not edits_in_place(name, argv[1:])
     ):
@@ -400,12 +434,21 @@ def bash_refusal(commands: list[guardlib.Command], i: int) -> str | None:
         # The file names may come down the pipe: `find . -name .env | xargs cat`.
         source = producer(commands, i)
         found = reader_refusal(
-            xargs_command(argv), command, kept(source.argv[1:]) if source else []
+            xargs_command(argv),
+            command,
+            kept(source.argv[1:]) if source else [],
+            bool(
+                source
+                and source.argv[:1] == ["find"]
+                and find_matches_env_file(source.argv)
+            ),
         )
     if not found and name == "find":
         inner = find_exec(argv)
         if inner:
-            found = reader_refusal(inner, command, kept(argv[1:]))
+            found = reader_refusal(
+                inner, command, kept(argv[1:]), find_matches_env_file(argv)
+            )
     found = found or (None if redirected(command) else inline_refusal(argv))
     if found:
         return found
@@ -429,11 +472,19 @@ def bash_refusal(commands: list[guardlib.Command], i: int) -> str | None:
             "Instead: use it without printing it: `X=$(...)`, a pipe straight to the command that needs\n"
             "it (`... | pbcopy`), `op read --out-file <path>`, or `op run -- <command>`."
         )
-    if (command.words in (["env"], ["set"]) or argv == ["printenv"]) and not redirected(
-        command
-    ):
+    dumps = command.words in (["env"], ["set"]) or argv == ["printenv"]
+    # `export`, `declare -p`, `typeset -p` with no names print every variable, secrets included.
+    dumps = dumps or (
+        name in ("export", "declare", "typeset")
+        and command.words == argv
+        and all(w.startswith("-") for w in argv[1:])
+        and not any(
+            set(w) & set("fF") for w in argv[1:]
+        )  # `declare -f` lists functions
+    )
+    if dumps and not redirected(command):
         return (
-            f"`{command.words[0]}` with no arguments: it prints every secret in the environment.\n\n"
+            f"`{' '.join(command.words)}` with no names: it prints every secret in the environment.\n\n"
             "Instead: print one variable that is not a secret (`printenv HOME`), or check one is set\n"
             "with `echo ${#NAME}`."
         )
