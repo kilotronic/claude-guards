@@ -1,0 +1,82 @@
+{
+  "description": "Guards that stop risky git, GitHub and shell commands before they run (stash, hard reset, --no-verify, commits and edits on main, branch switches in the main checkout, admin merges, fast GitHub polling, printed secrets, zsh special names, wholesale ours/theirs)",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/block-main-edits.py\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-shared-stash.py\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-hard-reset.py\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-no-verify.py\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-commit-on-main.py\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-admin-merge.py\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-branch-switch.py\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-zsh-special-vars.py\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-ours-theirs.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-github-polling.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-secret-print.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

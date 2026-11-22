@@ -1,0 +1,11 @@
+{
+  "name": "guards",
+  "version": "1.0.0",
+  "description": "Hooks that stop risky git, GitHub and shell commands an agent is about to run, and say what to do instead",
+  "author": {
+    "name": "Kilotronic"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/kilotronic/claude-guards",
+  "keywords": ["hooks", "git", "github", "safety"]
+}
