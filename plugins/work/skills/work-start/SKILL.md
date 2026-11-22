@@ -42,7 +42,8 @@ gh pr view <n> --json state -q .state        # MERGED: the item is yours
 
 - Exit 3 from `goal claim` means someone else took it (or it needs the owner). Say so, and go back to `goal`.
 - A claim pull request that conflicts: run `goal claim '<title>'` again. Git treats a claim on the
-  neighboring entry as a conflict too, so while the item is still free on main it rebuilds your claim there;
+  neighboring entry as a conflict too, so while the item is still free on main it rebuilds your claim there
+  (with a new pull request if the old one is gone);
   exit 3 means someone else took it. Then close your claim pull request, delete its branch, and go back to
   `goal`.
 - A `warning: auto-merge not armed` means the claim pull request merges only by hand, by the repo's rules.

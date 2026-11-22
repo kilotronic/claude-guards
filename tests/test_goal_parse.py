@@ -129,3 +129,14 @@ def test_a_mark_on_an_entry_ending_in_crlf_keeps_the_crlf() -> None:
     marked = goal.mark(text, 5, goal.Claim("agent-a", "box1", "2026-11-22"))
     assert marked.endswith("- **A.** x [claimed by agent-a on box1, 2026-11-22]\r\n")
     assert goal.unmark(marked, 5) == text
+
+
+def test_a_title_with_no_ascii_letters_still_gets_a_branch_name() -> None:
+    assert goal.slug("日本語のタイトル")
+
+
+def test_long_titles_that_share_a_start_get_different_slugs() -> None:
+    a = goal.slug("Make the timer ring louder on every phone in the kitchen, first")
+    b = goal.slug("Make the timer ring louder on every phone in the kitchen, second")
+    assert a != b
+    assert len(a) <= 60

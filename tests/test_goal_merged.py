@@ -95,3 +95,22 @@ def test_a_branch_name_that_looks_like_an_option_is_refused(tmp_path: Path) -> N
     args = argparse.Namespace(branch="-x", C=str(p.clone), no_fetch=True)
     with pytest.raises(RuntimeError, match="not a branch name"):
         goal.merged(args)
+
+
+def test_a_local_branch_behind_a_squash_merged_one_is_merged(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    tip = p.branch("work/snooze", "2026-11-21")
+    first = git(p.clone, "rev-parse", f"{tip}~0").strip()
+    git(p.clone, "checkout", "-q", "work/snooze")
+    (p.clone / "two.txt").write_text("two\n")
+    git(p.clone, "add", "two.txt")
+    git(p.clone, *IDENTITY, "commit", "-q", "-m", "feat: two")
+    git(p.clone, "push", "-q", "origin", "HEAD:refs/heads/work/snooze")
+    head = git(p.clone, "rev-parse", "HEAD").strip()
+    git(p.clone, "checkout", "-q", "--detach", "origin/main")
+    git(
+        p.clone, "branch", "-f", "work/snooze", first
+    )  # the local copy is one commit behind
+    p.prs("merged", [{"number": 9, "headRefOid": head}])
+    rc, out = p.json("merged", "work/snooze")
+    assert rc == 0, out

@@ -226,3 +226,69 @@ def test_a_claim_keeps_windows_line_endings(tmp_path: Path) -> None:
         p.origin, "diff", "--numstat", "main", "claim/add-a-snooze-button"
     ).split()
     assert stat[:2] == ["1", "1"]
+
+
+def test_rebuilding_a_claim_whose_pull_request_is_gone_opens_a_new_one(
+    tmp_path: Path,
+) -> None:
+    p = make_project(tmp_path)
+    assert p.run("claim", "Add a snooze button")[0] == 0
+    neighbour = claimed(
+        TODO, "Show the time left in the title", "agent-b", "2026-11-22"
+    )
+    p.push_files(
+        {"docs/todo.md": neighbour}, "chore: claim Show the time left in the title"
+    )
+    before = len([c for c in p.gh_calls() if c[:2] == ["pr", "create"]])
+    rc, _, err = p.run("claim", "Add a snooze button")
+    assert rc == 0, err
+    assert len([c for c in p.gh_calls() if c[:2] == ["pr", "create"]]) == before + 1
+
+
+def test_rebuilding_a_claim_with_its_pull_request_open_opens_no_other(
+    tmp_path: Path,
+) -> None:
+    p = make_project(tmp_path)
+    assert p.run("claim", "Add a snooze button")[0] == 0
+    p.prs(
+        "open",
+        [
+            {
+                "number": 7,
+                "title": "chore: claim Add a snooze button",
+                "headRefName": "claim/add-a-snooze-button",
+                "url": "u",
+            }
+        ],
+    )
+    neighbour = claimed(
+        TODO, "Show the time left in the title", "agent-b", "2026-11-22"
+    )
+    p.push_files(
+        {"docs/todo.md": neighbour}, "chore: claim Show the time left in the title"
+    )
+    rc, _, err = p.run("claim", "Add a snooze button")
+    assert rc == 0, err
+    assert len([c for c in p.gh_calls() if c[:2] == ["pr", "create"]]) == 1
+
+
+def test_a_claim_can_be_released_while_the_milestone_is_overdue(tmp_path: Path) -> None:
+    from workrun import README
+
+    p = make_project(
+        tmp_path,
+        readme=README.replace("**By:** no date", "**By:** 2026-01-01"),
+        todo=claimed(TODO, "Add a snooze button", "agent-a", "2026-11-21"),
+    )
+    rc, _, err = p.run("release", "Add a snooze button")
+    assert rc == 0, err
+
+
+def test_a_claim_without_a_name_to_claim_as_is_unclear(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    rc, out, err = p.run("claim", "Add a snooze button", who=None)
+    assert rc == 2
+    assert "GOAL_AS" in out + err
+    rc, out, _ = p.run(who=None)
+    assert rc == 0
+    assert "GOAL_AS" in out

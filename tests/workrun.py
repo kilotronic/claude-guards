@@ -139,7 +139,7 @@ class Project:
     def run(
         self,
         *args: str,
-        who: str = "agent-a",
+        who: str | None = "agent-a",
         today: str = "2026-11-22",
         cwd: Path | None = None,
     ) -> tuple[int, str, str]:
@@ -147,13 +147,17 @@ class Project:
             **os.environ,
             "PATH": f"{self.bin_dir}{os.pathsep}{os.environ['PATH']}",
             "FAKE_GH_DIR": str(self.gh_dir),
-            "GOAL_AS": who,
             "GOAL_MACHINE": "box1",
             "GIT_AUTHOR_NAME": "Test",
             "GIT_AUTHOR_EMAIL": "test@example.com",
             "GIT_COMMITTER_NAME": "Test",
             "GIT_COMMITTER_EMAIL": "test@example.com",
         }
+        env.pop("CLAUDE_CODE_SESSION_ID", None)
+        env.pop("CURSOR_CONVERSATION_ID", None)
+        env.pop("GOAL_AS", None)
+        if who:
+            env["GOAL_AS"] = who
         done = subprocess.run(
             [sys.executable, str(GOAL), *args, "--today", today],
             cwd=cwd or self.clone,

@@ -165,7 +165,8 @@ The entry still starts with its bold lead, so a repo's own checks of its entries
 - **Git is the lock.** Two claims edit the same line, so once one merges the other conflicts and can't. A
   second claim while the first is open is refused at once, since `claim/<slug>` already exists. Git also
   treats edits on neighboring lines as a conflict, so a claim on the next entry can block yours: run
-  `goal claim` again, and it rebuilds your claim on the new main while the item is still free there.
+  `goal claim` again, and it rebuilds your claim on the new main while the item is still free there, opening
+  a new pull request if the old one is gone.
 - **Release:** finishing the work deletes the entry in the work's own pull request; abandoning it runs
   `goal release '<title>'`, which opens the pull request that removes the mark.
 - **In progress** is the number of claim marks, so it is stated in one place.
@@ -173,7 +174,8 @@ The entry still starts with its bold lead, so a repo's own checks of its entries
   days is flagged by `goal`. It is never removed by itself.
 
 Who you are comes from `--as`, else `$GOAL_AS`, else the Claude Code session, plus the machine's name
-(`$GOAL_MACHINE` overrides it). A session label changes with each session, so to keep a claim yours across
+(`$GOAL_MACHINE` overrides it). With none of these, every session of the login shares one name, so
+`goal claim` refuses and `goal` warns. A session label changes with each session, so to keep a claim yours across
 sessions, set a stable `$GOAL_AS`. The mark is public wherever the todo file is: in a public repo, set
 `$GOAL_MACHINE` and `$GOAL_AS` to names you are happy to publish.
 

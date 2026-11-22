@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import getpass
+import hashlib
 import json
 import os
 import re
@@ -339,7 +340,15 @@ def key(text: str) -> str:
 
 
 def slug(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", key(text)).strip("-")[:50].rstrip("-")
+    """A branch-safe name for a title. A title with nothing ASCII to keep, or cut at 50 characters, gets a short
+    hash of the whole title, so two titles never share a branch by sharing a start."""
+    full = re.sub(r"[^a-z0-9]+", "-", key(text)).strip("-")
+    short = hashlib.sha1(key(text).encode("utf-8")).hexdigest()[:6]
+    if not full:
+        return f"item-{short}"
+    if len(full) > 50:
+        return f"{full[:50].rstrip('-')}-{short}"
+    return full
 
 
 def _safe(label: str) -> str:
@@ -353,6 +362,9 @@ def _safe(label: str) -> str:
 class Me:
     who: str
     machine: str
+    named: bool = (
+        True  # False: only the login name, which every session of this user shares
+    )
 
 
 def _date(text: str) -> dt.date | None:
@@ -582,7 +594,9 @@ class State:
     todo: Todo
 
 
-def load(repo: Repo, today: dt.date) -> tuple[State | None, dict, list[str]]:
+def load(
+    repo: Repo, today: dt.date, need_goal: bool = True
+) -> tuple[State | None, dict, list[str]]:
     """Everything the answer needs, or the list of what is missing."""
     missing: list[str] = []
     readme = repo.show("README.md")
@@ -603,16 +617,18 @@ def load(repo: Repo, today: dt.date) -> tuple[State | None, dict, list[str]]:
         "by": facts.get("by"),
         "goals_file": goals_path(facts),
     }
-    if not goal_info["milestone"] and not goal_info["goals_file"]:
+    # Claiming and releasing need only the todo file and the settings, so an overdue milestone never stops an
+    # agent from dropping its claim.
+    if need_goal and not goal_info["milestone"] and not goal_info["goals_file"]:
         missing.append(
             "no milestone stated: add **Current milestone:** with **Done when:**, or **Goals:** linking the file"
             " that states it"
         )
     by = goal_info["by"] or ""
     due = _date(by) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", by) else None
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", by) and due is None:
+    if need_goal and re.fullmatch(r"\d{4}-\d{2}-\d{2}", by) and due is None:
         missing.append(f"the **By:** date {by} is not a real date")
-    if due is not None and due < today:
+    if need_goal and due is not None and due < today:
         missing.append(
             f"{goal_info['milestone'] or 'the milestone'} was due {by}: is it still the milestone, with a new date?"
         )
@@ -653,9 +669,20 @@ def me_from_env(label: str | None) -> Me:
         sid = os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get(
             "CURSOR_CONVERSATION_ID"
         )
-        who = f"session-{sid[:8]}" if sid else getpass.getuser()
+        if not sid:
+            machine = (
+                os.environ.get("GOAL_MACHINE") or socket.gethostname().split(".")[0]
+            )
+            return Me(_safe(getpass.getuser()), _safe(machine), named=False)
+        who = f"session-{sid[:8]}"
     machine = os.environ.get("GOAL_MACHINE") or socket.gethostname().split(".")[0]
     return Me(_safe(who), _safe(machine))
+
+
+NO_NAME = (
+    "no name to claim as: every session of this user on this machine would share one, so set GOAL_AS (or pass"
+    " --as), or run inside a Claude Code session"
+)
 
 
 # --- the commands ------------------------------------------------------------------------------------------
@@ -681,6 +708,10 @@ def answer(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
         out.update(status="unclear", missing=missing, next=None)
         return UNCLEAR, out
     me = me_from_env(args.as_)
+    if not me.named:
+        out["warnings"].append(
+            f"{NO_NAME}; your own claims are told apart by the login name only"
+        )
     limit = wip_limit(state.facts)
     assert limit is not None
     prs = gh_json(
@@ -809,11 +840,13 @@ def change(
 ) -> tuple[int, dict]:
     """Open the tiny pull request that marks (claim) or unmarks (release) one entry."""
     repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
-    state, _, missing = load(repo, today)
+    state, _, missing = load(repo, today, need_goal=False)
     if state is None:
         raise Unclear("; ".join(missing) or "this repo is frozen")
     entry = find(state.todo, args.item)
     me = me_from_env(args.as_)
+    if not me.named and not getattr(args, "holder", None):
+        raise Unclear(NO_NAME)
     if claiming:
         if entry.claim and (entry.claim.who, entry.claim.machine) == (
             me.who,
@@ -866,11 +899,36 @@ def change(
             # Git sees edits on adjacent lines as one conflict, so a claim on the next entry blocks ours though
             # the item is still free on main: rebuild ours on the new main, and its pull request updates.
             _push_change(repo, state.todo_path, text, branch, subject, body, lease=old)
-            if not args.no_merge:
-                _arm(repo, branch, state.settings)
+            open_prs = gh_json(
+                [
+                    "pr",
+                    "list",
+                    "--head",
+                    branch,
+                    "--state",
+                    "open",
+                    "--json",
+                    "number,url,headRefName",
+                ],
+                repo.root,
+            )
+            if open_prs is None:
+                repo.warnings.append(
+                    f"could not ask GitHub for {branch}'s pull request: check that one is open"
+                )
+            ours = [
+                pr for pr in open_prs or [] if pr.get("headRefName") in (None, branch)
+            ]
+            if open_prs is not None and not ours:
+                url = _open_pr(repo, branch, subject, body, args, state.settings)
+                where = f"opened a new pull request for it: {url}"
+            else:
+                if not args.no_merge:
+                    _arm(repo, branch, state.settings)
+                where = "its open pull request updates itself"
             msg = (
                 f"rebuilt your claim on {branch} on the current {repo.ref}, since the item is still free there;"
-                " its pull request updates itself. Wait for it to merge, then run `goal`."
+                f" {where}. Wait for it to merge, then run `goal`."
             )
             return OK, {
                 "status": "ok",
@@ -1056,7 +1114,15 @@ def merged(args: argparse.Namespace) -> tuple[int, dict]:
                 )
             )
             continue
-        hit = next((pr for pr in prs if pr.get("headRefOid") == tip), None)
+        hit = next(
+            (
+                pr
+                for pr in prs
+                if pr.get("headRefOid") == tip
+                or _ancestor(repo, tip, pr.get("headRefOid"))
+            ),
+            None,
+        )
         if hit:
             results.append(
                 (OK, f"{short}: pull request #{hit.get('number')} merged at this tip")
@@ -1111,6 +1177,18 @@ def _common(suppress: bool) -> argparse.ArgumentParser:
         help="who you are (default: $GOAL_AS, else the session)",
     )
     return c
+
+
+def _ancestor(repo: Repo, tip: str, head: str | None) -> bool:
+    """`tip` is in the history of `head` (a local copy behind the branch a pull request merged)."""
+    if not head or not re.fullmatch(r"[0-9a-f]{40}", head):
+        return False
+    return (
+        run(
+            ["git", "merge-base", "--is-ancestor", tip, head], repo.root, check=False
+        ).returncode
+        == 0
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
