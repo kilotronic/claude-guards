@@ -113,3 +113,15 @@ def test_github_unreachable_says_claims_were_not_checked(tmp_path: Path) -> None
     assert any("claims weren't checked" in w for w in out["warnings"])
     rc, text, _ = p.run()
     assert "claims weren't checked" in text
+
+
+def test_unreachable_github_keeps_the_marks_the_working_copy_has(
+    tmp_path: Path,
+) -> None:
+    todo = claimed(TODO, "The timer skips a second", "agent-a", "2026-11-22")
+    p = make_project(tmp_path, todo=todo)
+    p.gh_fails()
+    _, out = p.json()
+    assert out["next"]["kind"] == "own"
+    assert out["in_progress"]["count"] == 1
+    assert any("claims weren't checked" in w for w in out["warnings"])

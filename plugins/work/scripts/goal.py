@@ -723,11 +723,14 @@ def load(
     unmerged: list[str] = []
     if local and path and todo_text is not None:
         merged_claims = _merged_claims(repo, path, settings)
-        for e in todo.entries:
-            counted = (merged_claims or {}).get(key(e.title))
-            if e.claim and e.claim != counted and merged_claims is not None:
-                unmerged.append(e.title)
-            e.claim = counted
+        if (
+            merged_claims is not None
+        ):  # unchecked: the marks stay as the working copy has them
+            for e in todo.entries:
+                counted = merged_claims.get(key(e.title))
+                if e.claim and e.claim != counted:
+                    unmerged.append(e.title)
+                e.claim = counted
     if todo_text is not None:
         missing += [f"{path} has no {m}" for m in todo.missing]
         for e in todo.entries:
