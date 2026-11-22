@@ -37,6 +37,10 @@ SCRIPT = "guard-github-polling.py"
         "for i in $(seq 10); do n=5; gh pr view $n; sleep 30; done",
         "for i in 1 2 3; do set -- 5; gh pr view $1; sleep 30; done",
         "for i in 1 2 3; do r=o/x; gh pr view 5 -R $r; sleep 30; done",
+        # `r=$p gh ...` sets r for gh's environment only: the `$r` in its words is the old value.
+        "for p in a b c; do r=$p gh pr view 1 -R o/$r; sleep 5; done",
+        # `${p:+5}` is 5 whatever p is.
+        "for p in a b c; do n=${p:+5}; gh pr view $n; sleep 5; done",
     ],
 )
 def test_polling_is_refused(command: str) -> None:
@@ -81,7 +85,6 @@ def test_a_monitor_that_polls_github_is_refused() -> None:
         "for p in a:1 b:2; do r=${p%:*}; n=${p#*:}; gh pr view $n -R o/$r; done",
         'for x in "o/a 1" "o/b 2"; do set -- $x; gh pr view $2 -R $1; done',
         'for x in "o/a 1" "o/b 2"; do set -- $x; gh pr view "${2}" -R "$1"; done',
-        "for p in a b; do r=$p gh pr view 1 -R o/$r; done",
         "for p in a b; do s=$p; r=$s; gh pr view 1 -R o/$r; done",
         'for p in a:1 b:2; do IFS=: read -r r n <<< "$p"; gh pr view $n -R o/$r; done',
     ],

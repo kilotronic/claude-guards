@@ -4,6 +4,12 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 
 ## Defects
 
+- **The polling guard reads loop variables from text, not from the parser.** It follows a loop variable through
+  assignments with a regex over quote-stripped text, so `q='$i'` and a literal `$1` in a single-quoted jq
+  string count as using it, and statement order is ignored (`n=$p; n=5`). Loops that split an item with
+  `$(echo $p | cut ...)`, `$((...))`, `export n=$p`, `GH_REPO=o/$p gh ...` or `read < <(...)` are still
+  refused. Shape: have the parser record the variables each assignment and each `$1` refers to.
+
 ## Next
 
 - **goal follows the README's link to the goals file.** `**Goals:**` is reported as a path only; the milestone

@@ -24,8 +24,11 @@ import guardlib
 RULE = "no-github-polling"
 MIN_INTERVAL = 60
 TOOLS = {"Bash", "Monitor"}
-# A variable a word expands: `$x`, `${x}`, `${x%...}`; not `${#x}`, its length.
-REF = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)")
+# A variable a word expands to its value: `$x`, `${x}`, `${x%...}`; not `${#x}`, its length, or
+# `${x:+...}`, which is the same text whatever x is (the parser's own rule for `refs`).
+REF = re.compile(
+    r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_]|:?\+)|\$([A-Za-z_][A-Za-z0-9_]*)"
+)
 # A positional parameter: `$1`, `${2}`, `$@`, `$*`.
 POSITIONAL = re.compile(r"\$\{?[1-9@*]")
 
@@ -76,6 +79,10 @@ def polls(loop: guardlib.Loop, commands: list[guardlib.Command]) -> bool:
     return any(not uses(c) for c in calls)
 
 
+def refs_in(text: str) -> set[str]:
+    return {a or b for a, b in REF.findall(text)}
+
+
 def carried(names: set[str], body: list[guardlib.Command]) -> tuple[set[str], bool]:
     """The variables that change with the loop variables *names* in a loop's *body*, and whether the
     positional parameters do (`set -- $var`). Followed until nothing new, since the body runs every pass."""
@@ -84,15 +91,16 @@ def carried(names: set[str], body: list[guardlib.Command]) -> tuple[set[str], bo
         before = (len(names), positional)
         for command in body:
             refs = {v for word in command.refs for v in word}
-            for text in command.assignments:
+            # `r=$p gh ...` sets r only in gh's environment; its words still see the old r.
+            for text in command.assignments if not command.words else ():
                 name, _, value = text.partition("=")
-                if names.intersection(REF.findall(value)):
+                if names.intersection(refs_in(value)):
                     names.add(name.rstrip("+").split("[")[0])
             argv = command.argv
             if argv[:1] == ["set"] and names & refs:
                 positional = True
             if argv[:1] == ["read"] and any(
-                op.endswith("<<<") and names.intersection(REF.findall(target))
+                op.endswith("<<<") and names.intersection(refs_in(target))
                 for op, target in command.redirects
             ):
                 names.update(w for w in argv[1:] if guardlib.NAME.fullmatch(w))
