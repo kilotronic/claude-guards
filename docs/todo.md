@@ -4,6 +4,12 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 
 ## Defects
 
+- **The ours-theirs guard's binary exception has narrow gaps.** A merge driver set by `merge.default` in git
+  config shows as `unspecified`, so the file is judged by its content; a text conflict whose markers were
+  removed by hand and whose path was then marked `binary` passes; and the marker scan reads each named file
+  to the end, so a multi-GB file on a slow disk could run the hook past its time limit, which lets the
+  command through. Shape: read `merge.default`, and cap the scan.
+
 - **The polling guard reads loop variables from text, not from the parser.** It follows a loop variable through
   assignments with a regex over quote-stripped text, so `q='$i'`, `q=\$i`, `read x <<< '$p'` and a literal
   `$1` in a single-quoted jq string count as using it; statement order is ignored (`n=$p; n=5`, or

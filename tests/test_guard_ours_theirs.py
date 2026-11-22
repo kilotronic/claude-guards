@@ -176,3 +176,77 @@ def test_a_binary_file_with_a_merge_driver_of_its_own_is_refused(
     repo = _conflicted(tmp_path / "r")
     (repo / ".git" / "info" / "attributes").write_text("*.woff2 merge=fonts\n")
     assert bash(SCRIPT, "git checkout --theirs fonts/a.woff2", cwd=repo)[0] == 2
+
+
+@pytest.mark.parametrize(
+    "setup",
+    [
+        "export GIT_DIR={there}/.git GIT_WORK_TREE={there}; ",
+        "GIT_DIR={there}/.git; GIT_WORK_TREE={there}; export GIT_DIR GIT_WORK_TREE; ",
+        "git -c core.worktree={there} ",
+        "git --config-env=core.worktree=WT ",
+    ],
+)
+def test_a_repo_named_earlier_in_the_call_or_by_config_is_refused(
+    tmp_path: Path, setup: str
+) -> None:
+    # Here notes.txt passes as binary (marked so, its markers gone); there it is a text conflict.
+    here = _conflicted(tmp_path / "here")
+    (here / ".gitattributes").write_text("data.bin binary\nnotes.txt binary\n")
+    (here / "notes.txt").write_text("resolved\n")
+    assert bash(SCRIPT, "git checkout --theirs notes.txt", cwd=here) == (0, "")
+    there = _conflicted(tmp_path / "there")
+    prefix = setup.format(there=there)
+    git = "" if prefix.startswith("git ") else "git "
+    command = f"{prefix}{git}checkout --theirs notes.txt"
+    assert bash(SCRIPT, command, cwd=here)[0] == 2
+
+
+def _text_merge_of_a_late_nul(path: Path) -> Path:
+    """A file git merges as text (its NUL is past byte 8000) with long conflict markers."""
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True)
+
+    def write(side: str) -> None:
+        (path / "f.dat").write_bytes(b"a\n" * 4500 + b"\0\n" + f"{side}\n".encode())
+
+    path.mkdir()
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    (path / ".gitattributes").write_text("f.dat conflict-marker-size=12\n")
+    write("base")
+    git("add", ".")
+    git("commit", "-q", "--no-verify", "-m", "base")
+    git("checkout", "-q", "-b", "other")
+    write("theirs")
+    git("commit", "-q", "--no-verify", "-am", "theirs")
+    git("checkout", "-q", "main")
+    write("ours")
+    git("commit", "-q", "--no-verify", "-am", "ours")
+    subprocess.run(
+        ["git", "-C", str(path), "merge", "other"], check=False, capture_output=True
+    )
+    return path
+
+
+def test_a_file_git_merged_as_text_is_refused_though_it_holds_a_nul(
+    tmp_path: Path,
+) -> None:
+    repo = _text_merge_of_a_late_nul(tmp_path / "r")
+    assert b"<" * 12 in (repo / "f.dat").read_bytes()
+    assert bash(SCRIPT, "git checkout --theirs f.dat", cwd=repo)[0] == 2
+
+
+def test_a_binary_file_by_its_absolute_path_passes(tmp_path: Path) -> None:
+    repo = _conflicted(tmp_path / "r")
+    command = f"git checkout --theirs {repo}/fonts/a.woff2"
+    assert bash(SCRIPT, command, cwd=repo) == (0, "")
+
+
+def test_paths_read_from_a_file_are_refused(tmp_path: Path) -> None:
+    repo = _conflicted(tmp_path / "r")
+    (repo / "list").write_text("notes.txt\n")
+    command = "git restore --ours --pathspec-from-file list fonts/a.woff2"
+    assert bash(SCRIPT, command, cwd=repo)[0] == 2

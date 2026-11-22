@@ -6,7 +6,7 @@
 `git checkout`/`git restore --ours|--theirs`, `git merge|rebase|cherry-pick|pull|revert -X ours|theirs` and
 the `-s ours` strategy throw away the other side's every change, conflicting or not. Each hunk is resolved for its intent.
 A binary file has no hunks, so one side of it is allowed: `checkout`/`restore` naming only conflicted files that
-git merged as binary (`binary_sides`).
+git merged as binary (`binary_sides`), with no git variable or repo option in the call.
 """
 
 from __future__ import annotations
@@ -24,13 +24,16 @@ FILE_LEVEL = {"checkout", "restore"}
 STRATEGY = {"merge", "rebase", "cherry-pick", "pull", "revert"}
 # Options of `checkout`/`restore` that take the next word as their value.
 VALUE_OPTIONS = {"-s", "--source", "--conflict", "--pathspec-from-file"}
-# Variables that point git at another repo or index than the one the guard would check.
-REPO_VARIABLES = ("GIT_DIR=", "GIT_WORK_TREE=", "GIT_INDEX_FILE=", "GIT_COMMON_DIR=")
+# Git's environment (GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_*, ...) and global options can point it at another
+# repo, index or work tree than the one the guard checks: a call that mentions any of them gets no exception.
+GIT_ENVIRONMENT = "GIT_"
+GLOBAL_REDIRECTS = ("-c", "--config-env", "--git-dir", "--work-tree", "--namespace")
+# How far git's merge looks for a NUL byte when it decides a side is binary.
+BINARY_PROBE = 8000
 # The `merge` attribute values that leave git's own choice of text or binary merge in place.
 BUILT_IN_MERGE = {"unspecified", "set", "text"}
 # Each git call's limit: two calls stay well under the hook's own 10 s, and a timeout refuses.
 GIT_TIMEOUT = 3
-MARKER = b"<<<<<<< "
 
 
 def _git(place: str, *args: str) -> bytes | None:
@@ -52,71 +55,120 @@ def paths(args: list[str]) -> list[str] | None:
         return args[args.index("--") + 1 :]
     out, words = [], iter(args)
     for word in words:
+        if word.startswith("--pathspec-from-file"):
+            return None
         if word in VALUE_OPTIONS:
             next(words, None)
-        elif word.startswith("--pathspec-from-file"):
-            return None
         elif not word.startswith("-"):
             out.append(word)
     return out
 
 
-def has_markers(path: str) -> bool:
-    """Whether the file has a conflict marker at the start of a line: git wrote it a text merge."""
+def has_markers(path: str, size: int) -> bool:
+    """Whether the file has a conflict marker of *size* at the start of a line: git wrote it a text merge."""
+    marker = b"\n" + b"<" * size + b" "
     tail = b"\n"
     try:
         with open(path, "rb") as f:
             while chunk := f.read(1 << 20):
-                if b"\n" + MARKER in tail + chunk:
+                if marker in tail + chunk:
                     return True
-                tail = chunk[-len(MARKER) :]
+                tail = chunk[-len(marker) :]
     except OSError:
         return True
     return False
+
+
+def binary_blobs(place: str, blobs: list[str]) -> set[str] | None:
+    """The *blobs* with a NUL byte in their first BINARY_PROBE bytes, git's merge test; None on an error."""
+    try:
+        with subprocess.Popen(
+            ["git", "-C", place, "cat-file", "--batch"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        ) as git:
+            git.stdin.write("".join(f"{b}\n" for b in blobs).encode())
+            git.stdin.close()
+            found = set()
+            for blob in blobs:
+                header = git.stdout.readline().split()
+                if len(header) != 3 or header[1] != b"blob":
+                    git.kill()
+                    return None
+                left = int(header[2]) + 1  # the content, then a newline
+                head = git.stdout.read(min(left, BINARY_PROBE))
+                left -= len(head)
+                while left > 0:
+                    chunk = git.stdout.read(min(left, 1 << 20))
+                    if not chunk:
+                        return None
+                    left -= len(chunk)
+                if b"\0" in head[: min(BINARY_PROBE, int(header[2]))]:
+                    found.add(blob)
+            return found
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
 
 
 def binary_sides(place: str, named: list[str]) -> bool:
     """Whether every path in *named* is one conflicted file that git merged as binary: no hunks to resolve.
 
     git merges a file as binary when its `merge` attribute is unset or `binary`, or, with git's own merge,
-    when a side looks binary (`ls-files --eol` reports `i/-text`). A file with a merge driver of its own, or
-    whose working copy has conflict markers (the attributes changed after the merge), is not."""
-    files = [os.path.normpath(p) for p in named]
+    when a side has a NUL byte in its first 8000 bytes. A file with a merge driver of its own, or whose working
+    copy has conflict markers (the attributes changed after the merge), is not."""
+    files = [
+        os.path.normpath(os.path.relpath(p, place) if os.path.isabs(p) else p)
+        for p in named
+    ]
     if any(not os.path.isfile(os.path.join(place, f)) for f in files):
         return False
-    if any(has_markers(os.path.join(place, f)) for f in files):
+    listed = _git(place, "ls-files", "-u", "-z", "--", *files)
+    if listed is None:
         return False
-    listed = _git(place, "ls-files", "-u", "--eol", "-z", "--", *files)
-    attrs = _git(place, "check-attr", "-z", "merge", "--", *files)
-    if listed is None or attrs is None:
-        return False
-    # `<mode> <blob> <stage>\t<eol info>\t<path>` per side.
-    looks_binary: dict[str, bool] = {}
+    # `<mode> <blob> <stage>\t<path>` per side.
+    sides: dict[str, list[str]] = {}
     for entry in filter(None, listed.split(b"\0")):
-        _, eol, name = entry.decode(errors="replace").split("\t", 2)
-        side = eol.split()[0] == "i/-text"
-        looks_binary[name] = looks_binary.get(name, False) or side
-    if set(looks_binary) != set(files):
+        info, name = entry.decode(errors="replace").split("\t", 1)
+        sides.setdefault(name, []).append(info.split()[1])
+    if set(sides) != set(files):
         return False  # one isn't conflicted, or a pattern matched other files
+    attrs = _git(
+        place, "check-attr", "-z", "merge", "conflict-marker-size", "--", *files
+    )
+    if attrs is None:
+        return False
     fields = attrs.decode(errors="replace").split("\0")
-    merge = {fields[i]: fields[i + 2] for i in range(0, len(fields) - 2, 3)}
-    for name in files:
-        value = merge.get(name, "unspecified")
-        if value in ("unset", "binary"):
-            continue
-        if value not in BUILT_IN_MERGE or not looks_binary[name]:
-            return False
-    return True
+    attr = {
+        (fields[i], fields[i + 1]): fields[i + 2] for i in range(0, len(fields) - 2, 3)
+    }
+    size = {f: attr.get((f, "conflict-marker-size"), "") for f in files}
+    if any(
+        has_markers(os.path.join(place, f), int(n) if n.isdigit() else 7)
+        for f, n in size.items()
+    ):
+        return False
+    merge = {f: attr.get((f, "merge"), "unspecified") for f in files}
+    if any(v not in BUILT_IN_MERGE | {"unset", "binary"} for v in merge.values()):
+        return False  # a merge driver of its own
+    by_content = [f for f in files if merge[f] in BUILT_IN_MERGE]
+    blobs = sorted({b for f in by_content for b in sides[f]})
+    binary = binary_blobs(place, blobs) if blobs else set()
+    if binary is None:
+        return False
+    return all(binary.intersection(sides[f]) for f in by_content)
 
 
 def binary_only(
-    command: guardlib.Command, git: tuple[str, list[str], list[str]]
+    command: guardlib.Command, git: tuple[str, list[str], list[str]], text: str
 ) -> bool:
-    """Whether the command names only conflicted binary files, in a repo the guard can see."""
-    _, args, dirs = git
-    if any(w.startswith(("--git-dir", "--work-tree")) for w in command.argv):
+    """Whether the command names only conflicted binary files, in a repo the guard can see. *text* is the
+    whole call: a git variable set or exported anywhere in it counts."""
+    if GIT_ENVIRONMENT in text:
         return False
-    if any(w.startswith(REPO_VARIABLES) for w in command.assignments + command.words):
+    _, args, dirs = git
+    options = command.argv[1 : len(command.argv) - len(args) - 1]
+    if any(w.startswith(GLOBAL_REDIRECTS) for w in options):
         return False
     place = guardlib.where(command, dirs)
     named = paths(args)
@@ -148,6 +200,11 @@ def strategy_side(args: list[str]) -> str | None:
     return None
 
 
+def call_text(event: dict) -> str:
+    command = (event.get("tool_input") or {}).get("command")
+    return command if isinstance(command, str) else ""
+
+
 def refusal(event: dict) -> str | None:
     for command in guardlib.commands_for(RULE, event):
         git = guardlib.git_args(command.argv)
@@ -159,7 +216,7 @@ def refusal(event: dict) -> str | None:
             side = next((word for word in args if word in ("--ours", "--theirs")), None)
             if side and "--" in args[: args.index(side)]:
                 side = None
-            if side and binary_only(command, git):
+            if side and binary_only(command, git, call_text(event)):
                 side = None
             what = side and f"`git {sub} {side}`"
         elif sub in STRATEGY:
