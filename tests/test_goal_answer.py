@@ -75,7 +75,7 @@ def test_the_last_item_is_taken(tmp_path: Path) -> None:
 
 
 def test_the_last_item_held_by_someone_else_leaves_a_cleanup(tmp_path: Path) -> None:
-    todo = "## Defects\n\n## Next\n\n- [claimed by agent-b on box2, 2026-11-21] **Add a snooze button.**\n"
+    todo = "## Defects\n\n## Next\n\n- **Add a snooze button.** [claimed by agent-b on box2, 2026-11-21]\n"
     p = make_project(tmp_path, todo=todo)
     _, out = p.json()
     assert out["next"]["kind"] == "cleanup"
@@ -293,3 +293,21 @@ def test_outside_a_git_repo_it_is_an_error(tmp_path: Path) -> None:
     rc, _, err = p.run(cwd=alone)
     assert rc == 1
     assert "git" in err
+
+
+def test_a_by_date_that_does_not_exist_is_unclear(tmp_path: Path) -> None:
+    p = make_project(
+        tmp_path, readme=README.replace("**By:** no date", "**By:** 2026-02-30")
+    )
+    rc, out = p.json()
+    assert rc == 2
+    assert any("2026-02-30" in m for m in out["missing"])
+
+
+def test_a_claim_date_that_does_not_exist_is_unclear(tmp_path: Path) -> None:
+    p = make_project(
+        tmp_path, todo=claimed(TODO, "Add a snooze button", "agent-b", "2026-02-30")
+    )
+    rc, out = p.json()
+    assert rc == 2
+    assert any("2026-02-30" in m for m in out["missing"])

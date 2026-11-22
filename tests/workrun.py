@@ -62,6 +62,9 @@ with open(os.path.join(d, "calls.log"), "a") as f:
 if os.path.exists(os.path.join(d, "fail")):
     sys.exit(1)
 args = sys.argv[1:]
+if args[:2] == ["pr", "merge"] and os.path.exists(os.path.join(d, "merge_fail")):
+    print("auto-merge is not allowed", file=sys.stderr)
+    sys.exit(1)
 if args[:2] == ["pr", "list"]:
     state = args[args.index("--state") + 1] if "--state" in args else "open"
     path = os.path.join(d, state + ".json")
@@ -210,4 +213,12 @@ def claimed(todo: str, title: str, who: str, date: str, machine: str = "box1") -
     """The todo text with `title`'s entry marked as claimed."""
     lead = f"- **{title}"
     assert lead in todo, title
-    return todo.replace(lead, f"- [claimed by {who} on {machine}, {date}] **{title}", 1)
+    start = todo.index(lead)
+    end = todo.index("\n", start)
+    cr = "\r" if todo[end - 1] == "\r" else ""
+    line = todo[start : end - len(cr)]
+    return (
+        todo[:start]
+        + f"{line} [claimed by {who} on {machine}, {date}]{cr}"
+        + todo[end:]
+    )

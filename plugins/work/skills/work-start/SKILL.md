@@ -40,8 +40,12 @@ gh pr checks <n> --watch --interval 60
 gh pr view <n> --json state -q .state        # MERGED: the item is yours
 ```
 
-- Exit 3 from `goal claim`, or a claim pull request that conflicts and can't merge, means someone else took
-  it. Say so, close your claim pull request if one is open, delete its branch, and go back to `goal`.
+- Exit 3 from `goal claim` means someone else took it (or it needs the owner). Say so, and go back to `goal`.
+- A claim pull request that conflicts: run `goal claim '<title>'` again. Git treats a claim on the
+  neighboring entry as a conflict too, so while the item is still free on main it rebuilds your claim there;
+  exit 3 means someone else took it. Then close your claim pull request, delete its branch, and go back to
+  `goal`.
+- A `warning: auto-merge not armed` means the claim pull request merges only by hand, by the repo's rules.
 - `goal` now answers **finish** with this item: that is the check that the claim is yours.
 
 ## 3. Worktree and branch
@@ -57,7 +61,7 @@ Then the repo's own set-up (its README or CLAUDE.md), in that worktree.
 
 ## 4. Post the standup step
 
-From the worktree, so the branch is detected:
+If standup is installed, from the worktree, so the branch is detected:
 
 ```bash
 standup status --goal '<the session goal>' --step 'started: <title>'

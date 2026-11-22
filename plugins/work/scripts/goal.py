@@ -44,8 +44,9 @@ SECTION = "How work runs here"
 STALE_DAYS = 3
 OK, ERROR, UNCLEAR, NO = 0, 1, 2, 3
 CLAIM_PREFIX, RELEASE_PREFIX = "claim/", "release/"
+# The mark ends the entry's first line, so the entry still starts with its bold lead for any check that reads it.
 MARK = re.compile(
-    r"^- \[claimed by (?P<who>[^\]]+?) on (?P<machine>[^\],]+), (?P<date>\d{4}-\d{2}-\d{2})\] "
+    r" \[claimed by (?P<who>[^\]]+?) on (?P<machine>[^\],]+), (?P<date>\d{4}-\d{2}-\d{2})\](?=\r?\n?$)"
 )
 SETTINGS_PATH = ".claude/work.toml"
 
@@ -230,7 +231,7 @@ class Todo:
 
 
 def _title(first: str) -> str:
-    body = MARK.sub("- ", first)[2:].strip()
+    body = MARK.sub("", first)[2:].strip()
     m = re.match(r"\*\*(.+?)\*\*", body)
     if m:
         title = re.sub(r"^\([^()]*\)\s*", "", m.group(1).strip())
@@ -267,7 +268,7 @@ def _entries(lines: list[str], section: str, start: int, end: int) -> list[Entry
         if in_code:
             continue
         if ln.startswith("- "):
-            m = MARK.match(ln)
+            m = MARK.search(ln)
             claim = Claim(m["who"], m["machine"], m["date"]) if m else None
             found.append(Entry(_title(ln), section, i + 1, ln, claim))
         elif found and ln.startswith((" ", "\t")) and ln.strip():
@@ -310,22 +311,24 @@ def parse_todo(text: str, settings: Settings) -> Todo:
 
 
 def mark(text: str, line: int, claim: Claim) -> str:
-    """The text with entry `line` (1-based) marked as claimed."""
+    """The text with entry `line` (1-based) marked as claimed, at the end of that line."""
     lines = text.splitlines(keepends=True)
     ln = lines[line - 1]
-    if not ln.startswith("- ") or MARK.match(ln):
+    if not ln.startswith("- ") or MARK.search(ln):
         raise ValueError(f"line {line} is not an unclaimed entry")
+    body = ln.rstrip("\r\n")
     lines[line - 1] = (
-        f"- [claimed by {claim.who} on {claim.machine}, {claim.date}] " + ln[2:]
+        f"{body.rstrip()} [claimed by {claim.who} on {claim.machine}, {claim.date}]"
+        + ln[len(body) :]
     )
     return "".join(lines)
 
 
 def unmark(text: str, line: int) -> str:
     lines = text.splitlines(keepends=True)
-    if not MARK.match(lines[line - 1]):
+    if not MARK.search(lines[line - 1]):
         raise ValueError(f"line {line} is not claimed")
-    lines[line - 1] = MARK.sub("- ", lines[line - 1], count=1)
+    lines[line - 1] = MARK.sub("", lines[line - 1], count=1)
     return "".join(lines)
 
 
@@ -350,6 +353,13 @@ def _safe(label: str) -> str:
 class Me:
     who: str
     machine: str
+
+
+def _date(text: str) -> dt.date | None:
+    try:
+        return dt.date.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 def _days(a: str, b: dt.date) -> int:
@@ -526,9 +536,20 @@ class Repo:
                 return name
         return "main"
 
-    def show(self, path: str) -> str | None:
-        done = run(["git", "show", f"{self.ref}:{path}"], self.root, check=False)
-        return done.stdout if done.returncode == 0 else None
+    def show(self, path: str, ref: str | None = None) -> str | None:
+        """A file as committed, line endings and all (text mode would turn CRLF into LF, and a claim would
+        then rewrite every line)."""
+        try:
+            done = subprocess.run(
+                ["git", "show", f"{ref or self.ref}:{path}"],
+                cwd=self.root,
+                capture_output=True,
+                timeout=60,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
 
     def branches(self) -> dict[str, dt.date]:
         done = run(
@@ -588,7 +609,10 @@ def load(repo: Repo, today: dt.date) -> tuple[State | None, dict, list[str]]:
             " that states it"
         )
     by = goal_info["by"] or ""
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", by) and dt.date.fromisoformat(by) < today:
+    due = _date(by) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", by) else None
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", by) and due is None:
+        missing.append(f"the **By:** date {by} is not a real date")
+    if due is not None and due < today:
         missing.append(
             f"{goal_info['milestone'] or 'the milestone'} was due {by}: is it still the milestone, with a new date?"
         )
@@ -612,6 +636,11 @@ def load(repo: Repo, today: dt.date) -> tuple[State | None, dict, list[str]]:
     todo = parse_todo(todo_text or "", settings)
     if todo_text is not None:
         missing += [f"{path} has no {m}" for m in todo.missing]
+        for e in todo.entries:
+            if e.claim and _date(e.claim.date) is None:
+                missing.append(
+                    f"{path} line {e.line}: the claim date {e.claim.date} is not a real date"
+                )
     if missing:
         return None, goal_info, missing
     assert path is not None and todo_text is not None
@@ -742,7 +771,9 @@ def render(out: dict) -> str:
             )
     lines += [f"warning: {w}" for w in out["warnings"]]
     if out.get("needs_owner"):
-        lines.append("needs the owner: " + "; ".join(out["needs_owner"]))
+        lines.append(
+            "held for the owner or planned work: " + "; ".join(out["needs_owner"])
+        )
     if "free" in out:
         lines.append("")
         lines.append("free, in order:")
@@ -797,6 +828,11 @@ def change(
             raise Refused(
                 f'"{entry.title}" is claimed by {c.who} on {c.machine}, {c.date}: pick another item'
             )
+        held = [m for m in state.settings.skip if m in entry.text]
+        if held:
+            raise Refused(
+                f'"{entry.title}" is marked {held[0]}: it needs the owner or planned work first. Pick another item'
+            )
         claim = Claim(me.who, me.machine, today.isoformat())
         text = mark(state.todo_text, entry.line, claim)
         branch = CLAIM_PREFIX + slug(entry.title)
@@ -819,14 +855,30 @@ def change(
         branch = RELEASE_PREFIX + slug(entry.title)
         subject = f"chore: release the claim on {entry.title}"
         body = f"Removes {entry.claim.who}'s claim mark so the item is free again; the work was not finished."
-    if (
-        run(
-            ["git", "ls-remote", "--exit-code", "--heads", "origin", branch],
-            repo.root,
-            check=False,
-        ).returncode
-        == 0
-    ):
+    remote = run(
+        ["git", "ls-remote", "--exit-code", "--heads", "origin", branch],
+        repo.root,
+        check=False,
+    )
+    if remote.returncode == 0:
+        old = remote.stdout.split()[0] if remote.stdout.split() else ""
+        if claiming and _own_open_claim(repo, state, entry, me, branch):
+            # Git sees edits on adjacent lines as one conflict, so a claim on the next entry blocks ours though
+            # the item is still free on main: rebuild ours on the new main, and its pull request updates.
+            _push_change(repo, state.todo_path, text, branch, subject, body, lease=old)
+            if not args.no_merge:
+                _arm(repo, branch, state.settings)
+            msg = (
+                f"rebuilt your claim on {branch} on the current {repo.ref}, since the item is still free there;"
+                " its pull request updates itself. Wait for it to merge, then run `goal`."
+            )
+            return OK, {
+                "status": "ok",
+                "branch": branch,
+                "url": None,
+                "message": msg,
+                "warnings": repo.warnings,
+            }
         raise Refused(
             f"origin already has {branch}: another {'claim' if claiming else 'release'} of this item is open. If its"
             f" pull request is closed, delete the branch (git push origin --delete {branch}) and try again"
@@ -835,16 +887,45 @@ def change(
     url = _open_pr(repo, branch, subject, body, args, state.settings)
     msg = (
         f"claim pull request: {url}\nThe item is yours once it merges. Wait with `gh pr checks <n> --watch"
-        " --interval 60`, then run `goal`: it names the item as yours. If the pull request can't merge, someone"
-        " else took the item: close it, delete its branch and run `goal` again."
+        " --interval 60`, then run `goal`: it names the item as yours. If the pull request conflicts, run `goal"
+        " claim` again: it rebuilds the claim while the item is still free, and exits 3 when someone else took it."
         if claiming
         else f"release pull request: {url}"
     )
-    return OK, {"status": "ok", "branch": branch, "url": url, "message": msg}
+    return OK, {
+        "status": "ok",
+        "branch": branch,
+        "url": url,
+        "message": msg,
+        "warnings": repo.warnings,
+    }
+
+
+def _own_open_claim(
+    repo: Repo, state: State, entry: Entry, me: Me, branch: str
+) -> bool:
+    """The open claim branch for this item marks it with our name: ours, not someone else's."""
+    text = repo.show(state.todo_path, ref=f"origin/{branch}")
+    if text is None:
+        return False
+    try:
+        theirs = find(parse_todo(text, state.settings), entry.title)
+    except Unclear:
+        return False
+    return theirs.claim is not None and (theirs.claim.who, theirs.claim.machine) == (
+        me.who,
+        me.machine,
+    )
 
 
 def _push_change(
-    repo: Repo, path: str, text: str, branch: str, subject: str, body: str
+    repo: Repo,
+    path: str,
+    text: str,
+    branch: str,
+    subject: str,
+    body: str,
+    lease: str | None = None,
 ) -> None:
     tmp = Path(tempfile.mkdtemp(prefix="goal-"))
     work = tmp / "w"
@@ -852,11 +933,17 @@ def _push_change(
         run(
             ["git", "worktree", "add", "-q", "--detach", str(work), repo.ref], repo.root
         )
-        (work / path).write_text(text)
+        target = work / path
+        if target.is_symlink() or not target.resolve().is_relative_to(work.resolve()):
+            raise RuntimeError(
+                f"{path} is a link or outside the repo: goal only writes a plain file"
+            )
+        target.write_bytes(text.encode("utf-8"))
         run(["git", "add", "--", path], work)
         run(["git", "commit", "-q", "-m", subject, "-m", body], work, timeout=300)
         run(
-            ["git", "push", "-q", "origin", f"HEAD:refs/heads/{branch}"],
+            ["git", "push", "-q", "origin", f"HEAD:refs/heads/{branch}"]
+            + ([f"--force-with-lease=refs/heads/{branch}:{lease}"] if lease else []),
             work,
             timeout=120,
         )
@@ -896,96 +983,139 @@ def _open_pr(
         )
     url = done.stdout.strip().splitlines()[-1] if done.stdout.strip() else branch
     if not args.no_merge:
-        merged = run(
-            ["gh", "pr", "merge", url, "--auto", f"--{s.merge_method}"],
-            repo.root,
-            check=False,
-        )
-        if merged.returncode != 0:
-            repo.warnings.append(f"auto-merge not armed: {merged.stderr.strip()}")
+        _arm(repo, url, s)
     return url
+
+
+def _arm(repo: Repo, pr: str, s: Settings) -> None:
+    done = run(
+        ["gh", "pr", "merge", pr, "--auto", f"--{s.merge_method}"],
+        repo.root,
+        check=False,
+    )
+    if done.returncode != 0:
+        repo.warnings.append(
+            f"auto-merge not armed ({done.stderr.strip() or 'gh failed'}): the claim holds only once its pull"
+            " request merges, so merge it by the repo's rules"
+        )
 
 
 def merged(args: argparse.Namespace) -> tuple[int, dict]:
     """The merged-branch test: every commit on main as the same patch, or a merged pull request whose head is the
-    branch's tip (a squash merge)."""
-    repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
+    branch's tip (a squash merge). The local branch and origin's copy are both tested, so unpushed commits on a
+    branch whose pull request merged are not taken for merged."""
     name = args.branch
-    ref = None
-    for cand in (f"origin/{name}", name):
-        if (
-            run(
-                ["git", "rev-parse", "--verify", "-q", cand + "^{commit}"],
-                repo.root,
-                check=False,
-            ).returncode
-            == 0
-        ):
-            ref = cand
-            break
-    if ref is None:
+    if name.startswith("-") or not name.strip():
+        raise RuntimeError(f"`{name}` is not a branch name")
+    repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
+    refs = [
+        ref
+        for ref in (f"refs/heads/{name}", f"refs/remotes/origin/{name}")
+        if run(
+            ["git", "rev-parse", "--verify", "-q", ref + "^{commit}"],
+            repo.root,
+            check=False,
+        ).returncode
+        == 0
+    ]
+    if not refs:
         raise RuntimeError(f"no branch {name} here or on origin")
-    tip = run(["git", "rev-parse", ref], repo.root).stdout.strip()
-    cherry = run(["git", "cherry", repo.ref, ref], repo.root).stdout.splitlines()
-    ahead = [ln for ln in cherry if ln.startswith("+")]
-    out = {"branch": name, "ref": ref, "ahead": len(ahead)}
-    if not ahead:
-        return OK, {
-            **out,
-            "merged": True,
-            "reason": f"every commit is on {repo.ref} as the same patch",
-        }
-    prs = gh_json(
-        [
-            "pr",
-            "list",
-            "--state",
-            "merged",
-            "--head",
-            name,
-            "--json",
-            "number,headRefOid",
-        ],
-        repo.root,
-    )
-    if prs is None:
-        return UNCLEAR, {
-            **out,
-            "merged": None,
-            "reason": f"{len(ahead)} commits are not on {repo.ref} as the same patch; merged pull requests not checked",
-        }
-    for pr in prs:
-        if pr.get("headRefOid") == tip:
-            return OK, {
-                **out,
-                "merged": True,
-                "reason": f"pull request #{pr.get('number')} merged at this tip",
-            }
-    return NO, {
-        **out,
-        "merged": False,
-        "reason": f"{len(ahead)} commits are not on {repo.ref}, and no merged pull request ends at this tip",
+    prs: list[dict] | None = None
+    asked = False
+    results: list[tuple[int, str]] = []
+    for ref in refs:
+        short = ref.replace("refs/heads/", "").replace("refs/remotes/", "")
+        tip = run(["git", "rev-parse", ref], repo.root).stdout.strip()
+        cherry = run(["git", "cherry", repo.ref, ref], repo.root).stdout.splitlines()
+        ahead = len([ln for ln in cherry if ln.startswith("+")])
+        if not ahead:
+            results.append(
+                (OK, f"{short}: every commit is on {repo.ref} as the same patch")
+            )
+            continue
+        if not asked:
+            prs = gh_json(
+                [
+                    "pr",
+                    "list",
+                    "--state",
+                    "merged",
+                    "--head",
+                    name,
+                    "--json",
+                    "number,headRefOid",
+                ],
+                repo.root,
+            )
+            asked = True
+        if prs is None:
+            results.append(
+                (
+                    UNCLEAR,
+                    f"{short}: {ahead} commits are not on {repo.ref} as the same patch; merged pull requests not checked",
+                )
+            )
+            continue
+        hit = next((pr for pr in prs if pr.get("headRefOid") == tip), None)
+        if hit:
+            results.append(
+                (OK, f"{short}: pull request #{hit.get('number')} merged at this tip")
+            )
+        else:
+            results.append(
+                (
+                    NO,
+                    f"{short}: {ahead} commits are not on {repo.ref}, and no merged pull request ends at this tip",
+                )
+            )
+    rank = {OK: 0, UNCLEAR: 1, NO: 2}
+    rc = max((r for r, _ in results), key=lambda r: rank[r])
+    verdict = {OK: True, UNCLEAR: None, NO: False}[rc]
+    return rc, {
+        "branch": name,
+        "refs": refs,
+        "merged": verdict,
+        "reason": "; ".join(t for _, t in results),
     }
 
 
-def build_parser() -> argparse.ArgumentParser:
-    common = argparse.ArgumentParser(add_help=False)
-    common.add_argument(
-        "-C", metavar="DIR", help="run in DIR instead of the current directory"
+def _common(suppress: bool) -> argparse.ArgumentParser:
+    """The shared options. The subcommands' copies default to SUPPRESS, so an option typed before the subcommand
+    (`goal --json claim X`) is not overwritten by the copy's default."""
+    c = argparse.ArgumentParser(add_help=False)
+
+    def d(value: object) -> object:
+        return argparse.SUPPRESS if suppress else value
+
+    c.add_argument(
+        "-C",
+        metavar="DIR",
+        default=d(None),
+        help="run in DIR instead of the current directory",
     )
-    common.add_argument("--json", action="store_true", help="print JSON for scripts")
-    common.add_argument(
+    c.add_argument(
+        "--json", action="store_true", default=d(False), help="print JSON for scripts"
+    )
+    c.add_argument(
         "--no-fetch",
         action="store_true",
+        default=d(False),
         help="read the last fetched origin, don't fetch",
     )
-    common.add_argument("--today", help=argparse.SUPPRESS)
-    common.add_argument(
+    c.add_argument("--today", default=d(None), help=argparse.SUPPRESS)
+    c.add_argument(
         "--as",
         dest="as_",
         metavar="LABEL",
+        default=d(None),
         help="who you are (default: $GOAL_AS, else the session)",
     )
+    return c
+
+
+def build_parser() -> argparse.ArgumentParser:
+    common = _common(suppress=False)
+    sub_common = _common(suppress=True)
     p = argparse.ArgumentParser(
         prog="goal",
         parents=[common],
@@ -998,7 +1128,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command")
     c = sub.add_parser(
-        "claim", parents=[common], help="open the pull request that claims an item"
+        "claim", parents=[sub_common], help="open the pull request that claims an item"
     )
     c.add_argument("item", help="the entry's title")
     c.add_argument(
@@ -1008,7 +1138,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     r = sub.add_parser(
         "release",
-        parents=[common],
+        parents=[sub_common],
         help="open the pull request that removes a claim mark",
     )
     r.add_argument("item", help="the entry's title")
@@ -1021,7 +1151,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="open the pull request without arming auto-merge",
     )
     m = sub.add_parser(
-        "merged", parents=[common], help="is this branch's work on the default branch?"
+        "merged",
+        parents=[sub_common],
+        help="is this branch's work on the default branch?",
     )
     m.add_argument("branch")
     return p
@@ -1054,8 +1186,10 @@ def main(argv: list[str] | None = None) -> int:
         return ERROR
     if args.json:
         print(json.dumps(out, indent=2))
-    elif args.command in ("claim", "release"):
-        print(out.get("message") or render(out))
+    elif args.command in ("claim", "release") and out.get("status") == "ok":
+        print(out["message"])
+        for w in out.get("warnings") or []:
+            print(f"warning: {w}")
     elif args.command == "merged":
         print(
             f"{'merged' if out['merged'] else 'not merged' if out['merged'] is False else 'unclear'}: {out['reason']}"

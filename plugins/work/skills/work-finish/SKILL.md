@@ -42,7 +42,8 @@ git branch -D <branch>
 git push origin --delete <branch>         # if the repo doesn't delete merged branches itself
 ```
 
-Post the last step, saying what is true: `standup status --step 'merged #<n>: <title>'`.
+If standup is installed, post the last step, saying what is true:
+`standup status --step 'merged #<n>: <title>'`.
 
 ## 3. If the work is abandoned instead
 

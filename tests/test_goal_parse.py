@@ -82,8 +82,9 @@ def test_marking_and_unmarking_change_only_the_entry_line() -> None:
     lines = TODO.splitlines(keepends=True)
     marked = goal.mark(TODO, 10, goal.Claim("agent-a", "box1", "2026-11-22"))
     assert marked.splitlines(keepends=True)[:9] == lines[:9]
-    assert marked.splitlines()[9].startswith(
-        "- [claimed by agent-a on box1, 2026-11-22] **Add a snooze"
+    # The bold lead stays first, so a repo's own checks of entries still read it; the mark ends the line.
+    assert marked.splitlines()[9] == (
+        "- **Add a snooze button.** Five more minutes from the ring. [claimed by agent-a on box1, 2026-11-22]"
     )
     assert goal.unmark(marked, 10) == TODO
 
@@ -121,3 +122,10 @@ def test_a_slug_is_safe_for_a_branch_name() -> None:
         goal.slug("Show the `time` left, in the title!")
         == "show-the-time-left-in-the-title"
     )
+
+
+def test_a_mark_on_an_entry_ending_in_crlf_keeps_the_crlf() -> None:
+    text = "## Defects\r\n\r\n## Next\r\n\r\n- **A.** x\r\n"
+    marked = goal.mark(text, 5, goal.Claim("agent-a", "box1", "2026-11-22"))
+    assert marked.endswith("- **A.** x [claimed by agent-a on box1, 2026-11-22]\r\n")
+    assert goal.unmark(marked, 5) == text

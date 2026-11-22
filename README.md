@@ -137,8 +137,8 @@ states it. A milestone whose By date has passed is unclear. A frozen repo has on
 
 The todo file has a `## Defects` (or `## Bugs`) heading and a `## Next` heading, each a list of entries,
 top first, each a line starting with a dash. An entry's title is its bold lead (a leading `(size, tag)` is dropped), else its first sentence.
-`###` subheadings belong to the section above them. An entry containing `(owner)` needs the owner and is
-listed apart.
+`###` subheadings belong to the section above them. An entry containing `(owner)` needs the owner: it is
+listed apart, and `goal claim` refuses it.
 
 An optional `.claude/work.toml` sets format details:
 
@@ -152,24 +152,30 @@ branch_prefix = "work/"               # the work branch is <prefix><slug of the 
 
 ### Claims live in the todo file
 
-A claim marks the entry's line with who has it, merged to main before the work starts:
+A claim marks the end of the entry's first line with who has it, merged to main before the work starts.
+The entry still starts with its bold lead, so a repo's own checks of its entries read it as before:
 
 ```markdown
-- [claimed by session-1a2b3c4d on laptop, 2026-11-22] **Add a snooze button.** Five more minutes.
+- **Add a snooze button.** Five more minutes. [claimed by session-1a2b3c4d on laptop, 2026-11-22]
 ```
 
 - `goal claim '<title>'` opens a pull request touching only that line, on a `claim/<slug>` branch, and arms
   auto-merge. The repo's normal review rules and branch protection apply to it. The claim holds once it
   merges.
 - **Git is the lock.** Two claims edit the same line, so once one merges the other conflicts and can't. A
-  second claim while the first is open is refused at once, since `claim/<slug>` already exists.
+  second claim while the first is open is refused at once, since `claim/<slug>` already exists. Git also
+  treats edits on neighboring lines as a conflict, so a claim on the next entry can block yours: run
+  `goal claim` again, and it rebuilds your claim on the new main while the item is still free there.
 - **Release:** finishing the work deletes the entry in the work's own pull request; abandoning it runs
   `goal release '<title>'`, which opens the pull request that removes the mark.
 - **In progress** is the number of claim marks, so it is stated in one place.
 - **Stale:** a claim with no open pull request naming the item and no commit on a branch named for it for 3
   days is flagged by `goal`. It is never removed by itself.
 
-Who you are comes from `--as`, else `$GOAL_AS`, else the Claude Code session, plus the machine's name.
+Who you are comes from `--as`, else `$GOAL_AS`, else the Claude Code session, plus the machine's name
+(`$GOAL_MACHINE` overrides it). A session label changes with each session, so to keep a claim yours across
+sessions, set a stable `$GOAL_AS`. The mark is public wherever the todo file is: in a public repo, set
+`$GOAL_MACHINE` and `$GOAL_AS` to names you are happy to publish.
 
 `goal merged <branch>` says whether a branch's work is on main: every commit there as the same patch, or a
 merged pull request ending at the branch's tip, as a squash merge leaves it.

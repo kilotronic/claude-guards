@@ -26,7 +26,7 @@ The order of work is `goal`'s, not this skill's: `goal` reads the repo's README 
    claims, then every free item in order and every claim. Exit 2 means the repo doesn't say enough: relay
    what it names as missing and ask the owner those questions. Never pick an item yourself instead.
 
-3. **Who else is working.** `standup list`: other sessions on this repo, their branches and pull requests.
+3. **Who else is working.** `standup list`, if standup is installed: other sessions on this repo, their branches and pull requests.
    A session working on the item `goal` names, without a claim mark, is a reason to coordinate first.
 4. **Open pull requests.** `gh pr list`. One of ours that isn't merged comes before new work: drive it to
    merged. A pull request about to change the code an item touches is worth naming.

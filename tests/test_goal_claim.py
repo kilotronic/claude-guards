@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -164,3 +165,64 @@ def test_the_claim_leaves_no_worktree_behind(tmp_path: Path) -> None:
     before = git(p.clone, "worktree", "list")
     p.run("claim", "Add a snooze button")
     assert git(p.clone, "worktree", "list") == before
+
+
+def test_options_before_the_subcommand_still_count(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    rc, out, err = p.run(
+        "-C", str(p.clone), "--json", "claim", "Add a snooze button", cwd=elsewhere
+    )
+    assert rc == 0, err
+    assert json.loads(out)["branch"] == "claim/add-a-snooze-button"
+
+
+def test_a_claim_that_conflicts_with_a_neighbours_claim_is_rebuilt_on_main(
+    tmp_path: Path,
+) -> None:
+    """Git sees edits on adjacent lines as one conflict, so a claim on the next entry blocks ours though the
+    item is still free: claiming again rebuilds ours on the new main."""
+    p = make_project(tmp_path)
+    assert p.run("claim", "Add a snooze button")[0] == 0
+    neighbour = claimed(
+        TODO, "Show the time left in the title", "agent-b", "2026-11-22"
+    )
+    git(p.clone, "checkout", "-q", "--detach", "origin/main")
+    p.push_files(
+        {"docs/todo.md": neighbour}, "chore: claim Show the time left in the title"
+    )
+    rc, out, err = p.run("claim", "Add a snooze button")
+    assert rc == 0, err
+    assert "rebuilt" in out
+    want = claimed(neighbour, "Add a snooze button", "agent-a", "2026-11-22")
+    assert p.origin_file("docs/todo.md", "claim/add-a-snooze-button") == want
+
+
+def test_a_failed_auto_merge_is_reported(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    (p.gh_dir / "merge_fail").write_text("")
+    rc, out, err = p.run("claim", "Add a snooze button")
+    assert rc == 0, err
+    assert "auto-merge not armed" in out + err
+
+
+def test_an_entry_needing_the_owner_cannot_be_claimed(tmp_path: Path) -> None:
+    todo = TODO.replace(
+        "- **Add a snooze button.**", "- **Add a snooze button.** (owner)"
+    )
+    p = make_project(tmp_path, todo=todo)
+    rc, out, err = p.run("claim", "Add a snooze button")
+    assert rc == 3
+    assert "owner" in out + err
+
+
+def test_a_claim_keeps_windows_line_endings(tmp_path: Path) -> None:
+    crlf = TODO.replace("\n", "\r\n")
+    p = make_project(tmp_path, todo=crlf)
+    rc, _, err = p.run("claim", "Add a snooze button")
+    assert rc == 0, err
+    stat = git(
+        p.origin, "diff", "--numstat", "main", "claim/add-a-snooze-button"
+    ).split()
+    assert stat[:2] == ["1", "1"]
