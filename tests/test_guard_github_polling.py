@@ -87,6 +87,7 @@ def test_a_monitor_that_polls_github_is_refused() -> None:
         'for x in "o/a 1" "o/b 2"; do set -- $x; gh pr view "${2}" -R "$1"; done',
         "for p in a b; do s=$p; r=$s; gh pr view 1 -R o/$r; done",
         'for p in a:1 b:2; do IFS=: read -r r n <<< "$p"; gh pr view $n -R o/$r; done',
+        "for p in a:1 b:2; do r=${p%:*} n=${p#*:}; gh pr view $n -R o/$r; done",
     ],
 )
 def test_one_off_and_slow_calls_pass(command: str) -> None:

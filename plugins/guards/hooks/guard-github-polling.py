@@ -92,7 +92,9 @@ def carried(names: set[str], body: list[guardlib.Command]) -> tuple[set[str], bo
         for command in body:
             refs = {v for word in command.refs for v in word}
             # `r=$p gh ...` sets r only in gh's environment; its words still see the old r.
-            for text in command.assignments if not command.words else ():
+            # The parser lifts only the first of `do a=1 b=2`; the rest stay words.
+            only_settings = all(guardlib.ASSIGNMENT.match(w) for w in command.words)
+            for text in command.assignments + command.words if only_settings else ():
                 name, _, value = text.partition("=")
                 if names.intersection(refs_in(value)):
                     names.add(name.rstrip("+").split("[")[0])

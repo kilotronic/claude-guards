@@ -5,8 +5,10 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 ## Defects
 
 - **The polling guard reads loop variables from text, not from the parser.** It follows a loop variable through
-  assignments with a regex over quote-stripped text, so `q='$i'` and a literal `$1` in a single-quoted jq
-  string count as using it, and statement order is ignored (`n=$p; n=5`). Loops that split an item with
+  assignments with a regex over quote-stripped text, so `q='$i'`, `q=\$i`, `read x <<< '$p'` and a literal
+  `$1` in a single-quoted jq string count as using it; statement order is ignored (`n=$p; n=5`, or
+  `set -- $p; set -- 5`); an assignment in a subshell or an uncalled function counts; `read -p prompt x`
+  follows `prompt`. Loops that split an item with
   `$(echo $p | cut ...)`, `$((...))`, `export n=$p`, `GH_REPO=o/$p gh ...` or `read < <(...)` are still
   refused. Shape: have the parser record the variables each assignment and each `$1` refers to.
 
