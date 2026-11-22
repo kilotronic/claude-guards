@@ -94,8 +94,7 @@ stays on.
 
 ## The work plugin
 
-`goal` reads the repo on `origin`'s default branch, never the checkout, which may be behind, and answers in a
-fixed order:
+`goal` reads the repo's working copy, so goals edited locally count right away, and answers in a fixed order:
 
 1. **your own claimed item**: finish it before starting another;
 2. **else the top free defect**, one defect fix at a time;
@@ -152,7 +151,8 @@ branch_prefix = "work/"               # the work branch is <prefix><slug of the 
 
 ### Claims live in the todo file
 
-A claim marks the end of the entry's first line with who has it, merged to main before the work starts.
+A claim marks the end of the entry's first line with who has it, merged to the default branch before the work
+starts.
 The entry still starts with its bold lead, so a repo's own checks of its entries read it as before:
 
 ```markdown
@@ -169,6 +169,10 @@ The entry still starts with its bold lead, so a repo's own checks of its entries
   a new pull request if the old one is gone.
 - **Release:** finishing the work deletes the entry in the work's own pull request; abandoning it runs
   `goal release '<title>'`, which opens the pull request that removes the mark.
+- **Claims are read from origin.** A mark is only real once merged, so `goal` reads marks from origin's default
+  branch, found by asking GitHub (`gh repo view`), not from the local `origin/HEAD`, which can be stale. A mark
+  that exists only in your working copy is reported as not yet merged and is not counted. If GitHub can't be
+  reached, `goal` says claims weren't checked and answers from the local files.
 - **In progress** is the number of claim marks, so it is stated in one place.
 - **Stale:** a claim with no open pull request naming the item and no commit on a branch named for it for 3
   days is flagged by `goal`. It is never removed by itself.

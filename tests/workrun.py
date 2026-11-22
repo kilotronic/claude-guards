@@ -65,7 +65,11 @@ args = sys.argv[1:]
 if args[:2] == ["pr", "merge"] and os.path.exists(os.path.join(d, "merge_fail")):
     print("auto-merge is not allowed", file=sys.stderr)
     sys.exit(1)
-if args[:2] == ["pr", "list"]:
+if args[:2] == ["repo", "view"]:
+    path = os.path.join(d, "default_branch")
+    name = open(path).read().strip() if os.path.exists(path) else "main"
+    print(json.dumps({"defaultBranchRef": {"name": name}}))
+elif args[:2] == ["pr", "list"]:
     state = args[args.index("--state") + 1] if "--state" in args else "open"
     path = os.path.join(d, state + ".json")
     print(open(path).read() if os.path.exists(path) else "[]")
@@ -126,6 +130,17 @@ class Project:
 
     def gh_fails(self) -> None:
         (self.gh_dir / "fail").write_text("")
+
+    def default_branch_is(self, name: str) -> None:
+        """What `gh repo view` says GitHub's default branch is."""
+        (self.gh_dir / "default_branch").write_text(name)
+
+    def edit_local(self, rel: str, old: str, new: str) -> None:
+        """Change a file in the working copy only, without committing it."""
+        path = self.clone / rel
+        text = path.read_text()
+        assert old in text, old
+        path.write_text(text.replace(old, new))
 
     def gh_calls(self) -> list[list[str]]:
         log = self.gh_dir / "calls.log"

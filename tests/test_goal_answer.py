@@ -279,11 +279,11 @@ def test_list_prints_every_free_item_in_order(tmp_path: Path) -> None:
     assert places == sorted(places)
 
 
-def test_it_reads_main_not_the_checkout(tmp_path: Path) -> None:
+def test_it_reads_the_working_copy_not_origin(tmp_path: Path) -> None:
     p = make_project(tmp_path)
     (p.clone / "docs" / "todo.md").write_text("## Defects\n\n## Next\n")
     _, out = p.json()
-    assert out["next"]["item"]["title"] == "The timer skips a second"
+    assert out["next"]["kind"] == "cleanup"
 
 
 def test_outside_a_git_repo_it_is_an_error(tmp_path: Path) -> None:
