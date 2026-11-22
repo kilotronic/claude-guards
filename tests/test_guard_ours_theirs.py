@@ -143,3 +143,36 @@ def test_a_text_file_or_anything_wider_is_still_refused(
 ) -> None:
     repo = _conflicted(tmp_path / "r")
     assert bash(SCRIPT, command, cwd=repo)[0] == 2
+
+
+def test_a_dot_slash_path_to_a_binary_file_passes(tmp_path: Path) -> None:
+    repo = _conflicted(tmp_path / "r")
+    assert bash(SCRIPT, "git checkout --theirs ./fonts/a.woff2", cwd=repo) == (0, "")
+
+
+@pytest.mark.parametrize("prefix", ["", "env "])
+def test_a_repo_named_by_the_environment_is_refused(
+    tmp_path: Path, prefix: str
+) -> None:
+    # Here notes.txt is binary by attribute; in the repo the variables name it is a text conflict.
+    here = _conflicted(tmp_path / "here")
+    (here / ".gitattributes").write_text("data.bin binary\nnotes.txt binary\n")
+    there = _conflicted(tmp_path / "there")
+    command = f"{prefix}GIT_DIR={there}/.git GIT_WORK_TREE={there} git checkout --theirs notes.txt"
+    assert bash(SCRIPT, command, cwd=here)[0] == 2
+
+
+def test_a_text_conflict_marked_binary_after_the_merge_is_refused(
+    tmp_path: Path,
+) -> None:
+    repo = _conflicted(tmp_path / "r")
+    (repo / ".git" / "info" / "attributes").write_text("notes.txt merge=binary\n")
+    assert bash(SCRIPT, "git checkout --theirs notes.txt", cwd=repo)[0] == 2
+
+
+def test_a_binary_file_with_a_merge_driver_of_its_own_is_refused(
+    tmp_path: Path,
+) -> None:
+    repo = _conflicted(tmp_path / "r")
+    (repo / ".git" / "info" / "attributes").write_text("*.woff2 merge=fonts\n")
+    assert bash(SCRIPT, "git checkout --theirs fonts/a.woff2", cwd=repo)[0] == 2

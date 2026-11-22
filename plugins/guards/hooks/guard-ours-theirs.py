@@ -6,7 +6,7 @@
 `git checkout`/`git restore --ours|--theirs`, `git merge|rebase|cherry-pick|pull|revert -X ours|theirs` and
 the `-s ours` strategy throw away the other side's every change, conflicting or not. Each hunk is resolved for its intent.
 A binary file has no hunks, so one side of it is allowed: `checkout`/`restore` naming only conflicted files that
-git merges as binary (a NUL byte in a side's first 8000 bytes, or the `merge` attribute unset or `binary`).
+git merged as binary (`binary_sides`).
 """
 
 from __future__ import annotations
@@ -24,14 +24,22 @@ FILE_LEVEL = {"checkout", "restore"}
 STRATEGY = {"merge", "rebase", "cherry-pick", "pull", "revert"}
 # Options of `checkout`/`restore` that take the next word as their value.
 VALUE_OPTIONS = {"-s", "--source", "--conflict", "--pathspec-from-file"}
-# How far git looks for a NUL byte when it decides a file is binary.
-BINARY_PROBE = 8000
+# Variables that point git at another repo or index than the one the guard would check.
+REPO_VARIABLES = ("GIT_DIR=", "GIT_WORK_TREE=", "GIT_INDEX_FILE=", "GIT_COMMON_DIR=")
+# The `merge` attribute values that leave git's own choice of text or binary merge in place.
+BUILT_IN_MERGE = {"unspecified", "set", "text"}
+# Each git call's limit: two calls stay well under the hook's own 10 s, and a timeout refuses.
+GIT_TIMEOUT = 3
+MARKER = b"<<<<<<< "
 
 
 def _git(place: str, *args: str) -> bytes | None:
     try:
         done = subprocess.run(
-            ["git", "-C", place, *args], capture_output=True, timeout=10, check=False
+            ["git", "-C", place, *args],
+            capture_output=True,
+            timeout=GIT_TIMEOUT,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -53,41 +61,68 @@ def paths(args: list[str]) -> list[str] | None:
     return out
 
 
-def binary(place: str, path: str) -> bool:
-    """Whether git merges the conflicted *path* at *place* as a binary file: no hunks to resolve."""
-    if not os.path.isfile(os.path.join(place, path)):
-        return False
-    # `<mode> <blob> <stage>\t<path>` per side; one path only, so a pathspec naming several files counts as not binary.
-    entries = [
-        e.split(b"\t", 1)
-        for e in (_git(place, "ls-files", "-u", "-z", "--", path) or b"").split(b"\0")
-        if e
-    ]
-    if not entries or len({name for _, name in entries}) != 1:
-        return False  # not conflicted, or several files
-    blobs = [info.split()[1].decode() for info, _ in entries]
-    attr = _git(place, "check-attr", "merge", "--", path) or b""
-    if attr.rstrip().endswith((b": unset", b": binary")):
+def has_markers(path: str) -> bool:
+    """Whether the file has a conflict marker at the start of a line: git wrote it a text merge."""
+    tail = b"\n"
+    try:
+        with open(path, "rb") as f:
+            while chunk := f.read(1 << 20):
+                if b"\n" + MARKER in tail + chunk:
+                    return True
+                tail = chunk[-len(MARKER) :]
+    except OSError:
         return True
-    for blob in blobs:
-        content = _git(place, "cat-file", "blob", blob)
-        if content is not None and b"\0" in content[:BINARY_PROBE]:
-            return True
     return False
+
+
+def binary_sides(place: str, named: list[str]) -> bool:
+    """Whether every path in *named* is one conflicted file that git merged as binary: no hunks to resolve.
+
+    git merges a file as binary when its `merge` attribute is unset or `binary`, or, with git's own merge,
+    when a side looks binary (`ls-files --eol` reports `i/-text`). A file with a merge driver of its own, or
+    whose working copy has conflict markers (the attributes changed after the merge), is not."""
+    files = [os.path.normpath(p) for p in named]
+    if any(not os.path.isfile(os.path.join(place, f)) for f in files):
+        return False
+    if any(has_markers(os.path.join(place, f)) for f in files):
+        return False
+    listed = _git(place, "ls-files", "-u", "--eol", "-z", "--", *files)
+    attrs = _git(place, "check-attr", "-z", "merge", "--", *files)
+    if listed is None or attrs is None:
+        return False
+    # `<mode> <blob> <stage>\t<eol info>\t<path>` per side.
+    looks_binary: dict[str, bool] = {}
+    for entry in filter(None, listed.split(b"\0")):
+        _, eol, name = entry.decode(errors="replace").split("\t", 2)
+        side = eol.split()[0] == "i/-text"
+        looks_binary[name] = looks_binary.get(name, False) or side
+    if set(looks_binary) != set(files):
+        return False  # one isn't conflicted, or a pattern matched other files
+    fields = attrs.decode(errors="replace").split("\0")
+    merge = {fields[i]: fields[i + 2] for i in range(0, len(fields) - 2, 3)}
+    for name in files:
+        value = merge.get(name, "unspecified")
+        if value in ("unset", "binary"):
+            continue
+        if value not in BUILT_IN_MERGE or not looks_binary[name]:
+            return False
+    return True
 
 
 def binary_only(
     command: guardlib.Command, git: tuple[str, list[str], list[str]]
 ) -> bool:
-    """Whether the command names only conflicted binary files, in a repo it can find."""
+    """Whether the command names only conflicted binary files, in a repo the guard can see."""
     _, args, dirs = git
     if any(w.startswith(("--git-dir", "--work-tree")) for w in command.argv):
+        return False
+    if any(w.startswith(REPO_VARIABLES) for w in command.assignments + command.words):
         return False
     place = guardlib.where(command, dirs)
     named = paths(args)
     if not place or not named:
         return False
-    return all(binary(place, p) for p in named)
+    return binary_sides(place, named)
 
 
 def strategy_side(args: list[str]) -> str | None:
