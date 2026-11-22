@@ -1,8 +1,11 @@
 # claude-guards
 
-A [Claude Code](https://code.claude.com) plugin with hooks that stop risky git, GitHub and shell commands
-before an agent runs them. Each refusal says why and what to do instead, so the agent can fix its own command
-and carry on.
+Two [Claude Code](https://code.claude.com) plugins for agents working in a repository, often several at once:
+
+- **guards**: hooks that stop risky git, GitHub and shell commands before an agent runs them. Each refusal says
+  why and what to do instead, so the agent can fix its own command and carry on.
+- **work**: the `goal` command, which answers "what should I work on next?" from what the repo states in
+  writing, and the skills that claim an item, build it and land it. See [The work plugin](#the-work-plugin).
 
 The guards were written for several agents working in one repository at once, each in its own git worktree.
 They suit a single agent too. Note that a plain clone is its own main checkout, so the main-checkout guards
@@ -14,10 +17,11 @@ as described below.
 ```text
 /plugin marketplace add kilotronic/claude-guards
 /plugin install guards@claude-guards
+/plugin install work@claude-guards
 ```
 
-Restart Claude Code after installing. The hooks need `python3` (3.9 or later) and `git` on `PATH`. They use
-no other packages.
+Restart Claude Code after installing. Both plugins need `python3` (3.9 or later) and `git` on `PATH`. They use
+no other packages; `work` also uses `gh` to open pull requests.
 
 ## What each guard does
 
@@ -88,6 +92,100 @@ Only the first that is set is read: when `$CLAUDE_GUARDS_OVERRIDES` names a file
 file in `~/.config` is not read either. If no file is found, or the one found can't be read, every rule
 stays on.
 
+## The work plugin
+
+`goal` reads the repo on `origin`'s default branch, never the checkout, which may be behind, and answers in a
+fixed order:
+
+1. **your own claimed item**: finish it before starting another;
+2. **else the top free defect**, one defect fix at a time;
+3. **else the top free item**, with a warning when taking it goes over the repo's limit on work in progress;
+4. **else a cleanup**: delete code, fix a test or a doc.
+
+Nothing blocks: the limit and the order are warnings and advice. When the repo doesn't say enough, `goal`
+names what is missing and exits 2; it never guesses.
+
+```text
+$ goal
+goal: M2, the phone app (done when: a timer rings on a locked phone)
+next: fix "The timer skips a second" (docs/todo.md line 5): the top free defect; defects come before anything new
+in progress: 0 of 2
+```
+
+`goal --list` adds every free item in order and every claim, and `--json` gives the same for scripts. Exit
+codes: 0 an answer, 1 an error, 2 unclear, 3 no (the item is someone else's, or a branch is not merged). The
+plugin puts `goal` on the Bash tool's `PATH`; outside Claude Code, run `plugins/work/bin/goal`.
+
+### What the repo states
+
+The facts live in the README, where people read them too, under one heading, as bold-label lines:
+
+```markdown
+## How work runs here
+
+- **Mission:** <who this is for and what it does for them>
+- **Current milestone:** <name>. **Done when:** <a finish line a person can check>. **By:** <date, or "no date">
+- **Work is recorded in:** `docs/todo.md`
+- **Claim before starting:** `goal claim '<the entry's title>'`
+- **Work in progress:** at most <N> at once; defect fixes one at a time
+- **Defects first:** the Defects section is fixed, top first, before anything new
+```
+
+`goal` needs the todo file, the limit, and either the milestone or a `**Goals:**` line linking the file that
+states it. A milestone whose By date has passed is unclear. A frozen repo has one line instead:
+`- **Frozen:** new work goes to <repo>.`
+
+The todo file has a `## Defects` (or `## Bugs`) heading and a `## Next` heading, each a list of entries,
+top first, each a line starting with a dash. An entry's title is its bold lead (a leading `(size, tag)` is dropped), else its first sentence.
+`###` subheadings belong to the section above them. An entry containing `(owner)` needs the owner and is
+listed apart.
+
+An optional `.claude/work.toml` sets format details:
+
+```toml
+defects = ["Bugs"]                    # the defects heading(s)
+next = ["Security", "Next", "Later"]  # the sections taken after defects, in order
+skip = ["(owner)", "**Owned by**"]    # text marking an entry that isn't free
+merge_method = "squash"               # how claim pull requests merge: squash, rebase or merge
+branch_prefix = "work/"               # the work branch is <prefix><slug of the title>
+```
+
+### Claims live in the todo file
+
+A claim marks the entry's line with who has it, merged to main before the work starts:
+
+```markdown
+- [claimed by session-1a2b3c4d on laptop, 2026-11-22] **Add a snooze button.** Five more minutes.
+```
+
+- `goal claim '<title>'` opens a pull request touching only that line, on a `claim/<slug>` branch, and arms
+  auto-merge. The repo's normal review rules and branch protection apply to it. The claim holds once it
+  merges.
+- **Git is the lock.** Two claims edit the same line, so once one merges the other conflicts and can't. A
+  second claim while the first is open is refused at once, since `claim/<slug>` already exists.
+- **Release:** finishing the work deletes the entry in the work's own pull request; abandoning it runs
+  `goal release '<title>'`, which opens the pull request that removes the mark.
+- **In progress** is the number of claim marks, so it is stated in one place.
+- **Stale:** a claim with no open pull request naming the item and no commit on a branch named for it for 3
+  days is flagged by `goal`. It is never removed by itself.
+
+Who you are comes from `--as`, else `$GOAL_AS`, else the Claude Code session, plus the machine's name.
+
+`goal merged <branch>` says whether a branch's work is on main: every commit there as the same patch, or a
+merged pull request ending at the branch's tip, as a squash merge leaves it.
+
+### The skills
+
+| Skill          | Does                                                                                                                  |
+| -------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `orient`       | What changed on main, `goal --list`, who else is working, open pull requests, one recommendation. Reads only          |
+| `next`         | Takes `goal`'s item and does it, start to merged, through `work-start` and `work-finish`                              |
+| `work-start`   | Proves the item is still open, claims it, makes the worktree and branch, posts the standup step, says what done means |
+| `work-finish`  | Removes the entry in the work's pull request, files follow-ups, runs the gates; after merge, cleans up                |
+| `branch-prune` | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default            |
+
+The skills post their progress with [standup](https://github.com/kilotronic/standup-board) when it is installed.
+
 ## Development
 
 ```sh
@@ -97,7 +195,8 @@ claude plugin validate .      # the plugin and marketplace manifests
 ```
 
 Each test runs the hooks the way Claude Code runs them, with a JSON event on stdin. A refusal exits with
-code 2 and writes its reason to stderr. Add a test that fails before you change a guard.
+code 2 and writes its reason to stderr. Add a test that fails before you change a guard. The `goal` tests
+build a made-up project with a local `origin` and a stand-in `gh`, so none reaches GitHub.
 
 ## Licence
 
