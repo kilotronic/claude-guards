@@ -77,3 +77,16 @@ jobs:
         with:
           persist-credentials: false
       - uses: kilotronic/lint@56a43d45e7b4479bba97c79404a4dc7671bd9796 # v1.3.2
+
+  # The one check a ruleset requires: every job above passed.
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    needs: [test, validate, data-leak-check, secret-scan, git-identity, checks]
+    if: always()
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do test "$r" = success; done
