@@ -99,9 +99,7 @@ def switches(sub: str, args: list[str], place: str) -> bool:
             # `git checkout -B main origin/main` resets the trunk and stays on it.
             return created not in TRUNKS
         if sub == "switch" and word in SWITCH_TRACK:
-            # The local branch is named after the start point's last part: `-t origin/main` is `main`.
-            start = next(words, "") or ""
-            return start.rsplit("/", 1)[-1] not in TRUNKS
+            return next(words, None) not in TRUNKS
         if sub == "checkout" and (
             word in FILE_MODE or word.startswith("--pathspec-from-file=")
         ):
