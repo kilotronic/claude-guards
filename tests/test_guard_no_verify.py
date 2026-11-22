@@ -341,6 +341,9 @@ def _staged(repo: Path) -> Path:
         "cat <<EOF | git commit --no-verify -F -\nbody\nEOF",
         "git commit -nm x",
         "git commit --no-veri -m x",
+        "echo | xargs git commit --no-verify -m x",
+        "caffeinate git commit -n -m x",
+        "stdbuf -o0 git commit -n -m x",
     ],
 )
 def test_a_bypass_of_new_content_is_refused(repo: Path, command: str) -> None:
@@ -358,3 +361,35 @@ def test_a_bypass_of_new_content_is_refused(repo: Path, command: str) -> None:
 )
 def test_text_and_flag_values_are_not_a_bypass(repo: Path, command: str) -> None:
     assert run_hook(command, _staged(repo)) == ALLOW, command
+
+
+@pytest.mark.parametrize("flag", ["-p", "--patch", "--interactive", "-pn"])
+def test_a_bypass_that_stages_hunks_during_the_commit_is_refused(
+    repo: Path, flag: str
+) -> None:
+    """The index matches HEAD before the commit, but `-p` stages new hunks into it."""
+    (repo / "a.txt").write_text("changed\n")
+    assert run_hook(f"git commit --amend --no-edit --no-verify {flag}", repo) == BLOCK
+
+
+def test_git_dash_c_with_a_tilde_is_judged_in_that_repo(
+    repo: Path, monkeypatch
+) -> None:
+    home = repo.parent
+    _staged(repo)
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": f"git -C ~/{repo.name} commit -n -m x"},
+        "cwd": "/",
+    }
+    env = {**_clean_env(), "HOME": str(home)}
+    done = subprocess.run(
+        [sys.executable, str(HOOK)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+        env=env,
+    )
+    assert done.returncode == BLOCK

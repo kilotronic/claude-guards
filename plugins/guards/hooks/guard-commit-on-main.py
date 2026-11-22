@@ -27,14 +27,18 @@ def target_dirs(command: str, cwd: str) -> list[str]:
     echoed or in a heredoc body never counts; `bash -c` and `$(...)` do."""
     out = []
     for parsed in guardlib.parse(command, cwd=cwd):
-        git = guardlib.git_args(parsed.argv)
+        git = guardlib.git_args(guardlib.launched_git(parsed.argv))
         if git and git[0] == "commit":
             out.append(guardlib.where(parsed, git[2]) or cwd)
     return out
 
 
 def refused(where: str) -> bool:
-    return branch(where) in TRUNK_BRANCHES and not opted_out(where)
+    return (
+        branch(where) in TRUNK_BRANCHES
+        and not opted_out(where)
+        and not guardlib.off(RULE, where)
+    )
 
 
 def target_dir(command: str, cwd: str) -> str | None:
@@ -88,8 +92,6 @@ def main() -> int:
         return 0
     where = target_dir(command, payload.get("cwd") or os.getcwd())
     if where is None or not refused(where):
-        return 0
-    if guardlib.off(RULE, where):
         return 0
     return guardlib.refuse(
         RULE,

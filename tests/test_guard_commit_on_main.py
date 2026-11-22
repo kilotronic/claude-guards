@@ -175,6 +175,9 @@ def test_a_repo_that_works_on_its_trunk_opts_out(tmp_path: Path) -> None:
         "cd {feature} | cat; git commit -m x",
         "bash -c 'git commit -m wip'",
         "bash -lc 'git commit -m wip'",
+        "echo | xargs git commit -m x",
+        "caffeinate git commit -m x",
+        "find . -maxdepth 0 -exec git commit -m x \\;",
     ],
 )
 def test_every_commit_on_main_is_refused(tmp_path: Path, command: str) -> None:
@@ -197,3 +200,18 @@ def test_a_commit_that_is_only_text_passes_on_main(
 ) -> None:
     main = _repo(tmp_path / "main", "main")
     assert _run(command, main)[0] == 0, command
+
+
+def test_a_repo_with_the_rule_off_does_not_let_another_through(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    off_repo = _repo(tmp_path / "off", "main")
+    on_repo = _repo(tmp_path / "on", "main")
+    monkeypatch.setattr(
+        guard.guardlib, "off", lambda rule, place: str(place).startswith(str(off_repo))
+    )
+    rc, err = _run(
+        f"git -C {off_repo} commit -m x; git -C {on_repo} commit -m y", tmp_path
+    )
+    assert rc == 2
+    assert str(on_repo) in err

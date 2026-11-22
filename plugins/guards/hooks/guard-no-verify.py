@@ -37,7 +37,18 @@ _COMMIT_VALUE_FLAGS = {
     "--template", "--fixup", "--squash", "--reuse-message", "--reedit-message",
     "--trailer", "--cleanup", "--pathspec-from-file",
 }  # fmt: skip
-_OUTSIDE_INDEX = {"-a", "--all", "-i", "--include", "-o", "--only"}
+# Content the index tree cannot vouch for: `-p`/`--interactive` stage new hunks during the commit.
+_OUTSIDE_INDEX = {
+    "-a",
+    "--all",
+    "-i",
+    "--include",
+    "-o",
+    "--only",
+    "-p",
+    "--patch",
+    "--interactive",
+}
 _SHORT_FLAGS = re.compile(r"^-[a-zA-Z]+$")
 # Short options of `git commit` that take a value, attached or as the next word: in `-mfinal` the `m` takes
 # `final`, so its `n` is not `-n`.
@@ -63,6 +74,17 @@ def _tokens(text: str) -> list[str]:
         return text.split()
 
 
+def _takes_next(token: str) -> bool:
+    """`-m x`, `-nm x`: a short group that ends in a value letter takes the next word (`-u` and `-S` take
+    theirs only attached)."""
+    return (
+        bool(_SHORT_FLAGS.match(token))
+        and _short_letters(token) == token[1:]
+        and token[-1] in _SHORT_VALUED
+        and token[-1] not in "uS"
+    )
+
+
 def _short_letters(token: str) -> str:
     """The option letters of a short cluster, up to and including the first that takes a value."""
     letters = ""
@@ -84,7 +106,7 @@ class _Git:
     @classmethod
     def parse(cls, command: guardlib.Command) -> _Git | None:
         """A `git` command from the shared parser; `VAR=x` before it (or after `env`) is its env."""
-        argv = command.argv
+        argv = guardlib.launched_git(command.argv)
         if not argv or os.path.basename(argv[0]) != "git":
             return None
         prefix = command.words[: len(command.words) - len(argv)]
@@ -135,14 +157,7 @@ class _Git:
                 continue
             if token.startswith("-"):
                 out.append(token)
-                # `-m x`: a cluster ending in a value letter takes the next word.
-                if (
-                    _SHORT_FLAGS.match(token)
-                    and _short_letters(token) == token[1:]
-                    and token[-1] in _SHORT_VALUED
-                    and token[-1] not in "uS"
-                ):
-                    skip = True
+                skip = _takes_next(token)
         return out
 
     def commits_outside_the_index(self) -> bool:
@@ -158,15 +173,10 @@ class _Git:
                 skip = True
                 continue
             if token in _OUTSIDE_INDEX or (
-                _SHORT_FLAGS.match(token) and "a" in _short_letters(token)
+                _SHORT_FLAGS.match(token) and set("aiop") & set(_short_letters(token))
             ):
                 return True
-            if (
-                _SHORT_FLAGS.match(token)
-                and _short_letters(token) == token[1:]
-                and token[-1] in _SHORT_VALUED
-                and token[-1] not in "uS"
-            ):
+            if _takes_next(token):
                 skip = True  # `-nm x`: the message is not a pathspec
                 continue
             if not token.startswith("-"):
@@ -184,7 +194,7 @@ class _Git:
     def cwd(self, base: str) -> str:
         for i, token in enumerate(self.globals):
             if token == "-C" and i + 1 < len(self.globals):
-                base = os.path.join(base, self.globals[i + 1])
+                base = os.path.join(base, os.path.expanduser(self.globals[i + 1]))
         return base
 
 

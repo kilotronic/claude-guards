@@ -527,6 +527,22 @@ def git_args(argv: list[str]) -> tuple[str, list[str], list[str]] | None:
     return rest[0], rest[1:], dirs
 
 
+# Programs that run another command given in their arguments (`xargs git commit`, `find -exec git ...`).
+LAUNCHERS = {
+    *("xargs", "find", "caffeinate", "stdbuf", "flock", "ionice", "doas", "watch"),
+    *("chrt", "taskset", "unbuffer", "parallel"),
+}
+
+
+def launched_git(argv: list[str]) -> list[str]:
+    """*argv*, or from its first `git` word when a launcher (`xargs`, `find -exec`, ...) runs git."""
+    if argv and os.path.basename(argv[0]) in LAUNCHERS:
+        for k, word in enumerate(argv[1:], 1):
+            if os.path.basename(word) == "git":
+                return argv[k:]
+    return argv
+
+
 def gh_args(argv: list[str]) -> tuple[list[str], str | None] | None:
     """`gh` argv as (arguments without `-R/--repo`, the repo or None), or None for another program."""
     if not argv or os.path.basename(argv[0]) != "gh":
