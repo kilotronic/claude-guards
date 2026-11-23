@@ -13,8 +13,9 @@ description:
 
 - **Remove the entry from the todo file** in the last commit, citing the work by its commit subject (a squash
   or rebase merge rewrites SHAs). Delete it; never tick it. The pull request still holds the claim while it
-  is open (`goal` reads the mark from the branch's earlier commit), and the item is gone once it merges. Keep
-  any durable lesson in the repo's decisions doc first.
+  is open (`goal` reads the mark from the branch's earlier commit), and the item is gone once it merges. A
+  plan row (`rows` in `.claude/work.toml`) is removed by deleting its file. Keep any durable lesson in the repo's
+  decisions doc first.
 - **Follow-ups found on the way become new todo entries** in the same pull request, in the right section,
   with no claim mark.
 - **Run the repo's gates**: its formatters, linters and tests (its CLAUDE.md or Makefile), and the review its
