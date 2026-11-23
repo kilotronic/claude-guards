@@ -55,7 +55,10 @@ goal claim '<the entry's title>'        # again, now that the pull request is op
   either pull request opens. The lower pull request number wins. Exit 0 (`already yours`) means yours holds
   the item. Exit 3 means another pull request marked it first: close yours with a comment naming the winner,
   as the message gives it (`gh pr close <n> --comment 'Closing: #<winner> marked this item first.'`), remove
-  the worktree and branch, and go back to `goal` for another item.
+  the worktree and branch, and go back to `goal` for another item. If the message gives no command, your
+  pull request isn't listed on GitHub yet: close it all the same. Exit 1 means `goal` couldn't check (GitHub
+  didn't answer, or another pull request's branch isn't fetched yet): run it again; don't start until it
+  exits 0.
 - `goal` now answers **finish** with this item and names your pull request.
 
 Then the repo's own set-up (its README or CLAUDE.md), in that worktree.

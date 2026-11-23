@@ -18,6 +18,14 @@ def work_tree(p: Project, tmp: Path, branch: str = "work/snooze") -> Path:
     return wt
 
 
+def pr_tree(p: Project, tmp: Path, pr: dict) -> Path:
+    """A worktree on the branch an open pull request comes from (open_claim made it in the clone)."""
+    name = pr["headRefName"]
+    wt = tmp / name.replace("/", "-")
+    git(p.clone, "worktree", "add", "-q", str(wt), name)
+    return wt
+
+
 def test_a_claim_commits_the_mark_on_the_work_branch(tmp_path: Path) -> None:
     p = make_project(tmp_path)
     wt = work_tree(p, tmp_path)
@@ -75,11 +83,19 @@ def test_an_item_an_open_pull_request_holds_is_refused_naming_it(
 
 def test_your_own_open_pull_request_is_already_yours(tmp_path: Path) -> None:
     p = make_project(tmp_path)
-    p.open_claim("Add a snooze button", "agent-a", 7)
-    wt = work_tree(p, tmp_path)
-    rc, out, _ = p.run("claim", "Add a snooze button", cwd=wt)
+    pr = p.open_claim("Add a snooze button", "agent-a", 7)
+    rc, out, _ = p.run("claim", "Add a snooze button", cwd=pr_tree(p, tmp_path, pr))
     assert rc == 0
     assert "already yours" in out and "#7" in out
+
+
+def test_the_same_name_on_another_branch_is_not_yours(tmp_path: Path) -> None:
+    """Two sessions can share a name (subagents of one session, one stable $GOAL_AS); a branch tells them apart."""
+    p = make_project(tmp_path)
+    p.open_claim("Add a snooze button", "agent-a", 7)
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=work_tree(p, tmp_path))
+    assert rc == 3
+    assert "#7" in out + err
 
 
 def test_after_opening_a_later_pull_request_the_claim_says_to_close_it(
@@ -88,9 +104,10 @@ def test_after_opening_a_later_pull_request_the_claim_says_to_close_it(
     """The tie rule: another pull request marked the item first, so ours, the higher number, closes itself."""
     p = make_project(tmp_path)
     p.open_claim("Add a snooze button", "agent-b", 7)
-    p.open_claim("Add a snooze button", "agent-a", 9)
-    wt = work_tree(p, tmp_path)
-    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
+    later = p.open_claim("Add a snooze button", "agent-a", 9)
+    rc, out, err = p.run(
+        "claim", "Add a snooze button", cwd=pr_tree(p, tmp_path, later)
+    )
     assert rc == 3
     assert "#7" in out + err
     assert "gh pr close 9 --comment 'Closing: #7 marked this item first.'" in out + err
@@ -99,15 +116,34 @@ def test_after_opening_a_later_pull_request_the_claim_says_to_close_it(
 def test_after_opening_the_lower_pull_request_the_claim_holds(tmp_path: Path) -> None:
     """The same tie the other way round: ours is the lower number, so it holds, and the other closes itself."""
     p = make_project(tmp_path)
-    p.open_claim("Add a snooze button", "agent-a", 7)
-    p.open_claim("Add a snooze button", "agent-b", 9)
-    wt = work_tree(p, tmp_path)
-    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
+    first = p.open_claim("Add a snooze button", "agent-a", 7)
+    later = p.open_claim("Add a snooze button", "agent-b", 9)
+    rc, out, err = p.run(
+        "claim", "Add a snooze button", cwd=pr_tree(p, tmp_path, first)
+    )
     assert rc == 0, err
     assert "already yours" in out and "#7" in out
-    rc, out, err = p.run("claim", "Add a snooze button", who="agent-b", cwd=wt)
+    rc, out, err = p.run(
+        "claim", "Add a snooze button", who="agent-b", cwd=pr_tree(p, tmp_path, later)
+    )
     assert rc == 3
     assert "gh pr close 9" in out + err
+
+
+def test_a_tie_between_two_sessions_with_one_name_goes_by_branch(
+    tmp_path: Path,
+) -> None:
+    p = make_project(tmp_path)
+    first = p.open_claim("Add a snooze button", "agent-a", 7)
+    later = p.open_claim("Add a snooze button", "agent-a", 9)
+    rc, out, err = p.run(
+        "claim", "Add a snooze button", cwd=pr_tree(p, tmp_path, later)
+    )
+    assert rc == 3
+    assert "gh pr close 9" in out + err
+    rc, out, _ = p.run("claim", "Add a snooze button", cwd=pr_tree(p, tmp_path, first))
+    assert rc == 0
+    assert "already yours" in out
 
 
 def test_claiming_twice_on_the_branch_commits_once(tmp_path: Path) -> None:

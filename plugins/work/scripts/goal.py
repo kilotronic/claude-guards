@@ -1138,7 +1138,13 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
             " fetch origin and try again"
         )
     held = entry.claim
-    if held and (held.who, held.machine) == (me.who, me.machine):
+    # A pull request is ours when its branch is this one: two sessions can share a name (subagents of one session,
+    # or one stable $GOAL_AS), never a branch. A mark on the default branch has no branch, so its name decides.
+    if held and (
+        held.head == branch
+        if held.pr
+        else (held.who, held.machine) == (me.who, me.machine)
+    ):
         return OK, {
             "status": "ok",
             "branch": branch,
@@ -1154,7 +1160,7 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
                 for title, holders in state.conflicts
                 if title == entry.title
                 for c in holders[1:]
-                if (c.who, c.machine) == (me.who, me.machine)
+                if c.head == branch
             ),
             None,
         )
@@ -1168,7 +1174,10 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
                 f'"{entry.title}" is held by {held.holder()}, which came first: close your #{ours.pr} and pick'
                 f" another item (gh pr close {ours.pr} --comment 'Closing: {why}.')"
             )
-        raise Refused(f'"{entry.title}" is held by {held.holder()}: pick another item')
+        raise Refused(
+            f'"{entry.title}" is held by {held.holder()}: pick another item (if this branch\'s pull request also'
+            " marks it, close that pull request)"
+        )
     owner = [m for m in state.settings.skip if m in entry.text]
     if owner:
         raise Refused(
