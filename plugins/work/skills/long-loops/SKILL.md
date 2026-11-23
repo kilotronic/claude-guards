@@ -18,16 +18,19 @@ own rules or plugin may say. Everything else needs its own.
 
 ## The four requirements
 
-1. **No half-written records.** Write to a temporary file and move it into place (`os.replace`), or append one
+1. **No half-written records.** Write to a temporary file in the target's own folder, flush and `fsync` it,
+   and move it into place (`os.replace`; a temporary file on another volume can't be moved), or append one
    whole line at a time. Never leave a rewrite that an interruption could cut in the middle. An append can
-   still be cut short by a kill or a full disk: on restart, drop a last line that has no line ending or won't
-   parse, before appending again.
+   still be cut short by a kill or a full disk: on restart, truncate the file back to its last complete line
+   before appending again.
 2. **Save at each finished item.** Write when one item's output is complete and valid on its own (one record,
    one case, one file).
 3. **Same-shaped records, valid at any count.** The saved file is a growing list of records of one shape; a
    reader must find it valid after 1 record or 1,000.
 4. **Resume.** On restart, read the ids already saved and do every item whose id is not among them (there can
    be gaps, after a skipped item or parallel workers). If an id is saved twice, the last record wins.
+
+Several processes never share one file: give each worker its own file and combine them at the end.
 
 ## Size matters
 
