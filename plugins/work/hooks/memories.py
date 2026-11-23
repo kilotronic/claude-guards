@@ -120,10 +120,9 @@ def wanted() -> list[re.Pattern] | None:
     return compiled
 
 
-def matches(path: Path) -> bool:
-    """Whether the memory is in scope: its folder name or its text matches one pattern in force."""
+def matches(path: Path, patterns: list[re.Pattern] | None) -> bool:
+    """Whether the memory is in scope under `wanted()`'s patterns: its folder name or text matches one."""
     try:
-        patterns = wanted()
         if patterns is None:
             return True
         folder = path.parent.parent.name
@@ -135,7 +134,13 @@ def matches(path: Path) -> bool:
 
 def offerable(path: Path, projects: Path) -> bool:
     """A memory in scope that is not personal and not yet decided."""
-    if not is_memory(path, projects) or not matches(path):
+    if not is_memory(path, projects):
+        return False
+    try:
+        patterns = wanted()
+    except (OSError, ValueError):
+        return False
+    if not matches(path, patterns):
         return False
     found = fields(path)
     return found.get("type") != "user" and not found.get("shared")
@@ -172,8 +177,12 @@ def sweep(projects: Path, stamp: Path, now: float) -> str:
     except (OSError, ValueError):
         pass
     undecided, sent = [], []
+    try:
+        patterns = wanted()
+    except (OSError, ValueError):
+        patterns = []
     for path in sorted(projects.glob("*/memory/*.md")):
-        if not is_memory(path, projects) or not matches(path):
+        if not is_memory(path, projects) or not matches(path, patterns):
             continue
         found = fields(path)
         if found.get("type") == "user":

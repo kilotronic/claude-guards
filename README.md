@@ -259,7 +259,8 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
   plugin's file that doesn't compile is skipped, and when no line compiles the offers are off. Hooks of different
   plugins run at the same time, so the first session after installing may list memories before the file is there.
   Nothing removes the file when the plugin is uninstalled; delete it by hand. The plugin's `hooks/hooks.json` adds
-  this under `SessionStart`:
+  this under `SessionStart` (it copies to a hidden name first, which the hook skips, so it never reads half a
+  file):
 
   ```json
   {
@@ -267,7 +268,7 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
     "hooks": [
       {
         "type": "command",
-        "command": "mkdir -p ~/.config/claude-guards/memory-match && cp \"${CLAUDE_PLUGIN_ROOT}/memory-match\" ~/.config/claude-guards/memory-match/my-team"
+        "command": "d=~/.config/claude-guards/memory-match && mkdir -p $d && cp \"${CLAUDE_PLUGIN_ROOT}/memory-match\" $d/.my-team.new && mv $d/.my-team.new $d/my-team"
       }
     ]
   }

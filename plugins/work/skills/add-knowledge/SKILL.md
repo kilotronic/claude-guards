@@ -17,9 +17,9 @@ Arguments are all optional:
 - **None:** the memories offered in this conversation: the one(s) you offered with "Worth sharing with the
   team?", or the daily list's "Memories waiting to be shared". Several: do each in turn, one pull request per
   repo (several memories for the same file go in one pull request). Nothing was offered in this conversation:
-  take the first 9 the daily check would list (undecided memories that match `$WORK_MEMORY_MATCH` when it is
-  set, else the lists in `~/.config/claude-guards/memory-match/` when there are any, not `type: user`, sorted by folder and name), show their names with one line each on what they say, and
-  do them, skipping ones that are clearly personal (offer `keep` for those in your report). Say how many are
+  take the first 9 the daily check would list (undecided memories, not `type: user`, sorted by folder and name,
+  that match `$WORK_MEMORY_MATCH` when it is set, else the lists in `~/.config/claude-guards/memory-match/` as
+  the work plugin's README says it reads them), show their names with one line each on what they say, and do them, skipping ones that are clearly personal (offer `keep` for those in your report). Say how many are
   left for the next run.
 - **`keep`:** mark what was offered (as above) personal.
 - **`<memory name>`** (the file name in `~/.claude/projects/*/memory/`, without `.md`), then optionally `keep`, a
