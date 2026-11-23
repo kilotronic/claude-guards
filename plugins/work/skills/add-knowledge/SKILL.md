@@ -32,7 +32,7 @@ whole.
 
 ## 2. `keep`: mark it personal and stop
 
-Add `shared: keep` to its frontmatter, right after `description:`. The memory hooks never offer it again. Done.
+Add `shared: keep` to its frontmatter, as a line of its own just before the closing `---`. The memory hooks never offer it again. Done.
 
 ## 3. Pick the home (one per fact)
 

@@ -152,6 +152,31 @@ def test_the_sweep_follows_the_setting(
     assert "`deploy`" in text and "open-one" not in text
 
 
+def test_the_daily_list_runs_only_when_a_session_starts_fresh() -> None:
+    # Not on resume, clear or compact: those would use up the day's list where the person may not see it.
+    _command("SessionStart", "startup")
+
+
+def test_a_long_list_of_sent_memories_says_how_many_more(
+    projects: Path, tmp_path: Path
+) -> None:
+    folder = projects / "-Users-x-Code-gh-widgets" / "memory"
+    for i in range(12):
+        memory(
+            folder, f"s{i:02d}", "rule", shared=f"https://github.com/octo/w/pull/{i}"
+        )
+    text = memories.sweep(projects, tmp_path / "s", now=time.time())
+    assert "and 3 more" in text
+
+
+def test_windows_line_endings_are_read(projects: Path) -> None:
+    p = projects / "-Users-x-Code-gh-widgets" / "memory" / "k.md"
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"---\r\nname: k\r\nshared: keep\r\n---\r\n\r\nrule\r\n")
+    assert memories.fields(p)["shared"] == "keep"
+    assert not memories.offerable(p, projects)
+
+
 def test_nothing_to_say_is_silent(tmp_path: Path) -> None:
     assert memories.sweep(tmp_path / "empty", tmp_path / "s", now=time.time()) == ""
 
@@ -200,7 +225,7 @@ def test_as_claude_code_runs_them(projects: Path, tmp_path: Path) -> None:
     assert done.returncode == 0, done.stderr
     context = json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"]
     assert "`plan-pr`" in context
-    done = _run(_command("SessionStart", None), "{}", env)
+    done = _run(_command("SessionStart", "startup"), "{}", env)
     assert done.returncode == 0, done.stderr
     assert "plan-pr" in done.stdout
     assert (tmp_path / "data" / "memory-sweep-last-run").exists()

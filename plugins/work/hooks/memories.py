@@ -161,8 +161,9 @@ def sweep(projects: Path, stamp: Path, now: float) -> str:
         )
     if sent:
         listed = "; ".join(f"`{p}` ({url})" for p, url in sent[:SHOWN])
+        more = f" and {len(sent) - SHOWN} more" if len(sent) > SHOWN else ""
         lines.append(
-            f"- Memories already sent as pull requests: {listed}. When convenient, check each pull request once "
+            f"- Memories already sent as pull requests: {listed}{more}. When convenient, check each pull request once "
             "(`gh pr view <url> --json state`); if MERGED, delete that memory file and its line in its "
             "MEMORY.md, since the fact now lives in the shared file. If CLOSED unmerged, remove its `shared:` "
             "line so it is offered again."
