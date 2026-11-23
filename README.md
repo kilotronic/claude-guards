@@ -254,10 +254,12 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
   expression, case ignored, for example your team's repo names) to offer only memories whose folder name or text
   matches; unset, every project memory is offered.
 - **Work stopped by a usage limit is parked on its pull request** (`scripts/park.py`). When a session stops on a
-  usage limit, the hook commits what is uncommitted on the work's branch as `wip: parked at a usage limit`
-  (without the commit hooks, which can't run there), pushes it, adds the `parked` label to the branch's pull
-  request and comments with the machine, the session id and the reason. Nothing happens on the default branch,
-  and a branch with no pull request is only pushed. At start-up, a session lists the repo's open pull requests
+  usage limit, the hook commits the changes to files git already tracks on the work's branch as `wip: parked
+at a usage limit` (without the commit hooks, which can't run there; new files stay put and are counted in the
+  comment, so nothing unreviewed is published), pushes it, adds the `parked` label to the branch's pull
+  request and comments with the machine, the session id and the reason. Nothing happens on the default branch or mid-merge,
+  and a branch with no open pull request is only pushed. git and gh never wait for a password, and one run
+  stops after 50 seconds in all. At start-up, a session lists the repo's open pull requests
   labeled `parked`. `park resume <n>` takes the label off, so the work is yours, and says how to check out its
   branch; on the same machine, `claude --resume <session id>` from the comment continues the session itself.
   Taking a label off is not atomic, so two sessions can rarely both take the same work. The comments name the

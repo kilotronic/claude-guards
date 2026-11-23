@@ -45,8 +45,12 @@ ON_BRANCH = {
     ("git", "rev-parse", "--show-toplevel"): (0, "/w/repo-fix\n"),
     ("git", "branch", "--show-current"): (0, "fix/thing\n"),
     ("git", "symbolic-ref"): (0, "origin/main\n"),
-    ("git", "status", "--porcelain"): (0, " M a.py\n"),
-    ("gh", "pr", "view"): (0, json.dumps({"number": 7, "url": "https://x/pull/7"})),
+    ("git", "status", "--porcelain"): (0, " M a.py\n?? notes.txt\n"),
+    ("git", "rev-parse", "-q", "--verify"): (1, ""),
+    ("gh", "pr", "view"): (
+        0,
+        json.dumps({"number": 7, "url": "https://x/pull/7", "state": "OPEN"}),
+    ),
 }
 HOOK = {
     "session_id": "abcd1234-5678",
@@ -58,7 +62,7 @@ HOOK = {
 def test_park_commits_pushes_labels_and_comments():
     run = Run(dict(ON_BRANCH))
     out = park.park(HOOK, run, "host1")
-    assert run.ran("git", "add", "-A")
+    assert run.ran("git", "add", "-u") and not run.ran("git", "add", "-A")
     commit = run.ran("git", "commit")[0]
     assert "--no-verify" in commit and "wip: parked at a usage limit" in commit
     assert run.ran("git", "push", "origin", "HEAD")
@@ -68,6 +72,8 @@ def test_park_commits_pushes_labels_and_comments():
     for fact in ("host1", "abcd1234-5678", "resets 3pm", "fix/thing", "park resume 7"):
         assert fact in body
     assert "more" not in body  # one line of the reason
+    assert "/w/repo-fix" not in body  # no local path in a comment others read
+    assert "1 untracked file" in body
     assert "#7" in out
 
 
@@ -105,7 +111,7 @@ def test_park_without_a_pull_request_pushes_and_says_so():
     out = park.park(HOOK, run, "host1")
     assert run.ran("git", "push", "origin", "HEAD")
     assert not run.ran("gh", "pr", "edit") and not run.ran("gh", "pr", "comment")
-    assert "no pull request" in out
+    assert "no open pull request" in out
 
 
 def test_park_makes_the_label_when_the_repo_has_none():
@@ -155,7 +161,12 @@ def test_resume_takes_the_label_off_and_says_where_the_work_is():
             ("gh", "pr", "view"): (
                 0,
                 json.dumps(
-                    {"headRefName": "fix/thing", "labels": [{"name": "parked"}]}
+                    {
+                        "headRefName": "fix/thing",
+                        "labels": [{"name": "parked"}],
+                        "state": "OPEN",
+                        "isCrossRepository": False,
+                    }
                 ),
             )
         }
@@ -173,7 +184,14 @@ def test_resume_refuses_a_pull_request_that_is_not_parked():
         {
             ("gh", "pr", "view"): (
                 0,
-                json.dumps({"headRefName": "fix/thing", "labels": []}),
+                json.dumps(
+                    {
+                        "headRefName": "fix/thing",
+                        "labels": [],
+                        "state": "OPEN",
+                        "isCrossRepository": False,
+                    }
+                ),
             )
         }
     )
@@ -222,3 +240,56 @@ def test_the_machine_name_can_be_set_for_a_public_repo(monkeypatch):
     assert park.machine() == "laptop"
     monkeypatch.delenv("GOAL_MACHINE")
     assert park.machine()
+
+
+def test_park_mid_merge_touches_nothing():
+    answers = dict(ON_BRANCH)
+    answers[("git", "rev-parse", "-q", "--verify")] = (0, "abc\n")
+    run = Run(answers)
+    out = park.park(HOOK, run, "host1")
+    assert not run.ran("git", "commit") and not run.ran("git", "push")
+    assert "in progress" in out
+
+
+def test_park_leaves_a_closed_pull_request_alone():
+    answers = dict(ON_BRANCH)
+    answers[("gh", "pr", "view")] = (
+        0,
+        json.dumps({"number": 7, "url": "u", "state": "MERGED"}),
+    )
+    run = Run(answers)
+    out = park.park(HOOK, run, "host1")
+    assert not run.ran("gh", "pr", "edit") and not run.ran("gh", "pr", "comment")
+    assert "no open pull request" in out
+
+
+def resume_run(**pr):
+    base = {
+        "headRefName": "fix/thing",
+        "labels": [{"name": "parked"}],
+        "state": "OPEN",
+        "isCrossRepository": False,
+    }
+    return Run({("gh", "pr", "view"): (0, json.dumps({**base, **pr}))})
+
+
+def test_resume_refuses_a_fork_or_a_closed_pull_request():
+    for pr in ({"isCrossRepository": True}, {"state": "CLOSED"}):
+        run = resume_run(**pr)
+        code, _ = park.resume("7", "/w", "s", "h", run)
+        assert code == 1
+        assert not run.ran("gh", "pr", "edit")
+
+
+def test_resume_quotes_the_branch_in_the_command_it_prints():
+    run = resume_run(headRefName="fix/a;rm")
+    code, text = park.resume("7", "/w", "s", "h", run)
+    assert code == 0
+    assert "'fix/a;rm'" in text
+
+
+def test_git_and_gh_never_wait_for_a_password():
+    env = park.quiet_env()
+    assert env["GIT_TERMINAL_PROMPT"] == "0"
+    assert "BatchMode=yes" in env["GIT_SSH_COMMAND"]
+    assert park.DEADLINE <= 50
