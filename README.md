@@ -200,6 +200,14 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 
 The skills post their progress with [standup](https://github.com/kilotronic/standup-board) when it is installed.
 
+### The hooks
+
+- **Agents may merge pull requests** (`allow-merge.py`). Claude Code's auto mode refuses `gh pr merge` even
+  after the person said yes, so this hook allows a Bash call that is only `gh pr merge …`: nothing chained to
+  it (`;`, `&&`, `|`), no redirection, substitution, wildcard or newline, and never `--admin` or `--body-file`
+  (`-F`). Anything else gets no answer and the normal permission check runs. When to ask before merging is
+  still each repo's rule; the guards plugin's `no-admin-merge` refuses `--admin` on its own.
+
 ## Development
 
 ```sh
