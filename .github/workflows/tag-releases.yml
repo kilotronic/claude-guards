@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   tag:
+    if: github.ref == 'refs/heads/main' # a manual run on another branch would tag that branch's commits
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the tags
@@ -30,7 +31,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          python3 .github/scripts/missing_tags.py | while read -r tag sha; do
+          # Into a file first, so a failing script fails the step instead of tagging nothing.
+          python3 .github/scripts/missing_tags.py > missing.txt
+          failed=0
+          while read -r tag sha; do
             echo "tagging $tag at $sha"
-            gh api "repos/$REPO/git/refs" -f "ref=refs/tags/$tag" -f "sha=$sha" --silent
-          done
+            # An annotated tag, like the ones made by hand before this workflow.
+            if object=$(gh api "repos/$REPO/git/tags" -f "tag=$tag" -f "message=${tag/--v/ }" \
+                -f "object=$sha" -f type=commit --jq .sha) &&
+              gh api "repos/$REPO/git/refs" -f "ref=refs/tags/$tag" -f "sha=$object" --silent; then
+              continue
+            fi
+            echo "::error::could not create $tag"
+            failed=1
+          done < missing.txt
+          exit "$failed"

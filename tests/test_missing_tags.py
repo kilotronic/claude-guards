@@ -98,3 +98,57 @@ def test_each_plugin_is_checked_on_its_own(tmp_path: Path) -> None:
     both = _commit(repo, "add both")
     _git(repo, "tag", "guards--v1.1.1")
     assert _missing(repo) == [f"work--v1.4.0 {both}"]
+
+
+def test_a_change_to_a_dependency_constraint_does_not_move_the_tag(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    manifest = repo / "plugins" / "jl" / ".claude-plugin" / "plugin.json"
+    manifest.parent.mkdir(parents=True)
+
+    def write(version: str, needs: str) -> None:
+        body = {
+            "name": "jl",
+            "version": version,
+            "dependencies": [{"name": "work", "version": needs}],
+        }
+        manifest.write_text(json.dumps(body, indent=2) + "\n")
+
+    write("1.0.0", "^1.1.0")
+    _commit(repo, "add jl")
+    _git(repo, "tag", "jl--v1.0.0")
+    write("1.1.0", "^1.1.0")
+    bump = _commit(repo, "release jl 1.1.0")
+    write("1.1.0", "^1.4.0")
+    _commit(repo, "need a newer work")
+    assert _missing(repo) == [f"jl--v1.1.0 {bump}"]
+
+
+def test_a_version_set_back_to_an_older_value_is_tagged_where_it_returned(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    _write_plugin(repo, "work", "1.0.0")
+    _commit(repo, "add work")
+    _write_plugin(repo, "work", "1.1.0")
+    _commit(repo, "release work 1.1.0")
+    _git(repo, "tag", "work--v1.1.0")
+    _write_plugin(repo, "work", "1.0.0")
+    back = _commit(repo, "go back to 1.0.0")
+    assert _missing(repo) == [f"work--v1.0.0 {back}"]
+
+
+def test_a_version_that_is_not_a_version_number_is_refused(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _write_plugin(repo, "work", "1.0 beta")
+    _commit(repo, "add work")
+    done = subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        cwd=repo,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode != 0
+    assert "1.0 beta" in done.stderr
