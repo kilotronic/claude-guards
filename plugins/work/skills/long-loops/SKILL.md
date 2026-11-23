@@ -19,19 +19,22 @@ own rules or plugin may say. Everything else needs its own.
 ## The four requirements
 
 1. **No half-written records.** Write to a temporary file and move it into place (`os.replace`), or append one
-   whole line at a time. Never leave a rewrite that an interruption could cut in the middle.
+   whole line at a time. Never leave a rewrite that an interruption could cut in the middle. An append can
+   still be cut short by a kill or a full disk: on restart, drop a last line that has no line ending or won't
+   parse, before appending again.
 2. **Save at each finished item.** Write when one item's output is complete and valid on its own (one record,
    one case, one file).
 3. **Same-shaped records, valid at any count.** The saved file is a growing list of records of one shape; a
    reader must find it valid after 1 record or 1,000.
-4. **Resume.** On restart, read the ids already saved, skip them, and carry on from the first missing one.
+4. **Resume.** On restart, read the ids already saved and do every item whose id is not among them (there can
+   be gaps, after a skipped item or parallel workers). If an id is saved twice, the last record wins.
 
 ## Size matters
 
 Rewriting the whole file after each item costs time that grows with the square of the number of items: fine
 for tens or hundreds, a real cost for thousands. For a loop that may reach thousands, append one JSON line per
 item (JSONL) and, if one file is wanted at the end, combine them once when the loop finishes, keeping the same
-resume-by-id rule.
+resume-by-id rule: write the combined file whole (temporary file and `os.replace`) before removing the lines.
 
 ## When one write at the end is fine
 
@@ -45,6 +48,6 @@ loop runs and how independent its items are.
 - [ ] One item produces one complete, valid record
 - [ ] Each record is saved whole (temp file + os.replace, or one appended line)
 - [ ] The saved file is valid at any count
-- [ ] A restart reads the saved ids and resumes from the first missing one
+- [ ] A restart drops a cut-off last line, reads the saved ids and does every item not saved
 - [ ] Repeating an item is safe (a crash can land between doing it and saving it)
 ```
