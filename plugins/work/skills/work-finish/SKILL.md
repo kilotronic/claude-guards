@@ -9,6 +9,10 @@ description:
 
 # Finish an item
 
+When `goal` answers `record: issues`, the repo keeps its work in GitHub issues: skip the todo-file steps here
+and follow [work-start's "Work kept in GitHub issues"](../work-start/SKILL.md#work-kept-in-github-issues) for
+the issue; the gates, the merge and the clean-up below are the same.
+
 ## 1. Before merge, in the work's own pull request
 
 - **Remove the entry from the todo file** in the last commit, citing the work by its commit subject (a squash

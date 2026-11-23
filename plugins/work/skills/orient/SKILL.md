@@ -27,6 +27,9 @@ branches carry a claim mark), and answers.
    claims and any item two pull requests both claim, then every free item in order and every claim with its
    pull request. Exit 2 means the repo doesn't say enough: relay
    what it names as missing and ask the owner those questions. Never pick an item yourself instead.
+   `record: issues` means the repo keeps its work in GitHub issues: list them as
+   [work-start's "Work kept in GitHub issues"](../work-start/SKILL.md#work-kept-in-github-issues) says, and
+   recommend from that list.
 
 3. **Open pull requests.** `gh pr list`: who else is working on this repo, on which branches, since the
    work's own pull request opens when it starts. One of ours that isn't merged comes before new work: drive it to

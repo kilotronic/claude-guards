@@ -1,6 +1,6 @@
 {
   "name": "work",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "The goal command and the skills around it: what to work on next, claiming it, opening the pull request with a fresh review and landing it; long-loops and add-knowledge; hooks that let an agent run a plain gh pr merge in auto mode, warn at a merge with no fresh review, and offer to share what Claude saves to memory, and park work stopped by a usage limit on its pull request",
   "author": {
     "name": "Kilotronic"
