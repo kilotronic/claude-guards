@@ -11,7 +11,8 @@ description:
 # Start an item
 
 Takes the item the user named, or `goal`'s next item (`goal --json`: `.next.item.title`). Do the steps in
-order; none is optional.
+order; none is optional. When `goal` answers `record: issues`, the repo keeps its work in GitHub issues instead:
+follow [Work kept in GitHub issues](#work-kept-in-github-issues) below.
 
 ## 1. Prove it is still open
 
@@ -76,3 +77,31 @@ Restate in plain words, to the person:
 
 If the entry doesn't make done clear, ask the person before writing code, and add the answer to the entry in
 the work's own pull request, so the next reader has it.
+
+## Work kept in GitHub issues
+
+This is the one rule the work skills share for a repo whose README names GitHub issues as its record of work.
+`goal` reads the README's `**Work is recorded in:**` line and says which record the repo keeps (`goal --json`:
+`.record`):
+
+- **`todo`**: the line names a todo file. Every step in these skills applies as written.
+- **`issues`**: the line names GitHub issues. There is no todo file to read, mark or delete from, so the
+  todo-file steps (`goal claim`, `goal release`, removing the entry, follow-ups as entries) give way to the
+  issue steps here. Everything else stays: the worktree and branch, tests first, the repo's gates, the `pr`
+  skill's review, auto-merge and the clean-up.
+- **Neither:** `goal` exits 2 and says the line names neither a todo file nor GitHub issues. Say so to the
+  person and treat it as today's unclear answer: ask the owner, and pick nothing yourself.
+
+For `issues`, **use the repo's own issue-tracking skill or rules first**: if the repo has a skill for its
+issues, or rules for them in its README or CLAUDE.md, follow those to find, claim, update and finish the work,
+and use the steps below only where they say nothing. With none, the minimal steps with `gh`:
+
+- **Find:** `gh issue list --state open --search 'no:assignee'`. Defects (a `bug` label) come first, then the
+  rest, oldest first, unless the repo states another order. Prove it is still open as in step 1.
+- **Claim:** `gh issue edit <n> --add-assignee @me`, then make the worktree and branch as in step 2, push,
+  and open the work's pull request at once with `Closes #<n>` in its body. An issue someone else is assigned
+  to, or that an open pull request already names, is theirs: pick another.
+- **Finish:** work-finish as written, minus the todo entry. The pull request's `Closes #<n>` closes the issue
+  when it merges. Follow-ups found on the way become new issues (`gh issue create`), named in the pull
+  request.
+- **Abandon:** close the pull request and `gh issue edit <n> --remove-assignee @me`.

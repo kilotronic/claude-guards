@@ -5,7 +5,8 @@
 It reads, from the working copy (so goals edited locally count right away):
 
 - the README's `## How work runs here` section: the milestone or goals file, the todo file and the limit on
-  work in progress;
+  work in progress. When its **Work is recorded in:** line names GitHub issues rather than a todo file, goal
+  answers `record: issues` with no item, and the skills work through the issues;
 - the todo file: its Defects and Next sections, top first, and the claim marks on their entries;
 - `.claude/work.toml`, optional: other heading names, entries that need the owner, the merge method, and a
   plan kept as row files (`rows`): one markdown table row per `<n>.md` file, offered as `<rows_name> <n>` with
@@ -207,7 +208,16 @@ def _path_in(value: str) -> str | None:
 
 def todo_path(facts: dict[str, str]) -> str | None:
     value = facts.get("work is recorded in")
-    return _path_in(value) if value else None
+    path = _path_in(value) if value else None
+    return path if path and "://" not in path else None
+
+
+def in_issues(facts: dict[str, str]) -> bool:
+    """The **Work is recorded in:** line names GitHub issues and no todo file."""
+    value = facts.get("work is recorded in") or ""
+    return todo_path(facts) is None and bool(
+        re.search(r"\bgithub issues?\b", value, re.IGNORECASE)
+    )
 
 
 def goals_path(facts: dict[str, str]) -> str | None:
@@ -1000,6 +1010,10 @@ def load(
         "by": facts.get("by"),
         "goals_file": goals_path(facts),
     }
+    if in_issues(facts):
+        # The repo keeps its work in GitHub issues: goal has no list to read, and says so.
+        goal_info["recorded_in"] = facts["work is recorded in"]
+        return None, goal_info, []
     # Claiming and releasing need only the todo file and the settings, so an overdue milestone never stops an
     # agent from dropping its claim.
     if need_goal and not goal_info["milestone"] and not goal_info["goals_file"]:
@@ -1018,7 +1032,10 @@ def load(
     path = todo_path(facts)
     if path is None:
         missing.append(
-            "no **Work is recorded in:** line naming the todo file in backticks or a link"
+            "the **Work is recorded in:** line names neither a todo file (in backticks or a link) nor GitHub"
+            " issues"
+            if "work is recorded in" in facts
+            else "no **Work is recorded in:** line naming the todo file (in backticks or a link) or GitHub issues"
         )
     limit = wip_limit(facts)
     if limit is None:
@@ -1087,6 +1104,19 @@ def me_from_env(label: str | None) -> Me:
     return Me(_safe(who), _safe(machine))
 
 
+ISSUES = (
+    "this repo records its work in GitHub issues: find, claim and finish work there, by the repo's own"
+    " issue-tracking skill or rules when it has them, else by the steps in the work-start skill"
+)
+
+
+def no_todo(goal_info: dict) -> str:
+    """Why claim and release have no todo file to mark."""
+    if "recorded_in" in goal_info:
+        return "this repo records its work in GitHub issues, not a todo file: claim the issue instead"
+    return "this repo is frozen"
+
+
 NO_NAME = (
     "no name to claim as: every session of this user on this machine would share one, so set GOAL_AS (or pass"
     " --as), or run inside a Claude Code session"
@@ -1113,9 +1143,15 @@ def answer(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
             "reason": f"this repo is frozen: {goal_info['frozen']}",
         }
         return OK, out
+    if "recorded_in" in goal_info:
+        out.update(
+            record="issues", next={"kind": "issues", "item": None, "reason": ISSUES}
+        )
+        return OK, out
     if state is None:
         out.update(status="unclear", missing=missing, next=None)
         return UNCLEAR, out
+    out["record"] = "todo"
     me = me_from_env(args.as_)
     work = repo.branch_name()
     me.branch = work if work != repo.base else None
@@ -1204,9 +1240,12 @@ def render(out: dict) -> str:
         lines.append(
             f"goal: {g['milestone']}" + (f" ({'; '.join(bits)})" if bits else "")
         )
-    else:
+    elif g.get("goals_file"):
         lines.append(f"goal: see {g['goals_file']}")
     n = out["next"]
+    if out.get("record") == "issues":
+        lines += [f"record: {g['recorded_in']}", f"next: {n['reason']}"]
+        return "\n".join(lines + [f"warning: {w}" for w in out["warnings"]])
     if n["item"]:
         i = n["item"]
         lines.append(
@@ -1319,9 +1358,9 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
     the claim."""
     repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
     branch = _work_branch(repo, "claim")
-    state, _, missing = load(repo, today, need_goal=False)
+    state, goal_info, missing = load(repo, today, need_goal=False)
     if state is None:
-        raise Unclear("; ".join(missing) or "this repo is frozen")
+        raise Unclear("; ".join(missing) or no_todo(goal_info))
     entry = find(state.todo, args.item)
     me = me_from_env(args.as_)
     me.branch = branch
@@ -1431,9 +1470,9 @@ def release(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
     its pull request instead."""
     repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
     branch = _work_branch(repo, "release")
-    state, _, missing = load(repo, today, need_goal=False)
+    state, goal_info, missing = load(repo, today, need_goal=False)
     if state is None:
-        raise Unclear("; ".join(missing) or "this repo is frozen")
+        raise Unclear("; ".join(missing) or no_todo(goal_info))
     entry = find(state.todo, args.item)
     me = me_from_env(args.as_)
     if not me.named and not args.holder:

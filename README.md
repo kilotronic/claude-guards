@@ -134,6 +134,13 @@ The facts live in the README, where people read them too, under one heading, as 
 - **Defects first:** the Defects section is fixed, top first, before anything new
 ```
 
+**The record of work** is what the `**Work is recorded in:**` line names, and `goal` says which (`record` in
+`--json`). A todo file, in backticks or a link, is read as below. A line that names GitHub issues instead (for
+example `- **Work is recorded in:** GitHub issues on the team board`) gets `record: issues` and no item: the
+skills then find, claim and finish work through issues, by the repo's own issue-tracking skill or rules when it
+has them, else by a few `gh` steps (work-start's "Work kept in GitHub issues"). A line that names neither is
+unclear, and `goal` says so.
+
 `goal` needs the todo file, the limit, and either the milestone or a `**Goals:**` line linking the file that
 states it. A milestone whose By date has passed is unclear. A frozen repo has one line instead:
 `- **Frozen:** new work goes to <repo>.`

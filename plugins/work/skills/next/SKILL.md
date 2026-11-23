@@ -26,6 +26,9 @@ Take what it names, unless the user named an item; don't stop to offer it.
   it in one line and carry on, unless the owner has said otherwise.
 - **cleanup**: nothing is free. Take a risk-free cleanup: delete dead code, merge a duplicate, fix a test or a
   doc. A cleanup needs no claim.
+- **issues** (`record: issues`): the repo keeps its work in GitHub issues. Find, claim and finish one as
+  [work-start's "Work kept in GitHub issues"](../work-start/SKILL.md#work-kept-in-github-issues) says; the
+  steps below still apply, with that section in place of the todo-file steps.
 - **Exit 2** (unclear): relay what `goal` names as missing and ask the owner. Never pick something instead.
 - **`warning: you hold the later claim`**: another pull request marked that item first. Stop that work: close
   your pull request, or move its work to another item (`/work:work-start` on it, after `goal release`).
