@@ -190,16 +190,18 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 
 ### The skills
 
-| Skill          | Does                                                                                                                  |
-| -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `orient`       | What changed on main, `goal --list`, who else is working, open pull requests, one recommendation. Reads only          |
-| `next`         | Takes `goal`'s item and does it, start to merged, through `work-start` and `work-finish`                              |
-| `work-start`   | Proves the item is still open, claims it, makes the worktree and branch, posts the standup step, says what done means |
-| `work-finish`  | Removes the entry in the work's pull request, files follow-ups, runs the gates; after merge, cleans up                |
-| `branch-prune` | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default            |
-| `long-loops`   | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id               |
+| Skill          | Does                                                                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `orient`       | What changed on main, `goal --list`, who else is working, open pull requests, one recommendation. Reads only                  |
+| `next`         | Takes `goal`'s item and does it, start to merged, through `work-start` and `work-finish`                                      |
+| `work-start`   | Proves the item is still open, claims it, makes the worktree and branch, posts the standup step, says what done means         |
+| `work-finish`  | Removes the entry in the work's pull request, files follow-ups, runs the gates; after merge, cleans up                        |
+| `branch-prune` | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default                    |
+| `long-loops`   | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                       |
+| `pr`           | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed |
 
-The skills post their progress with [standup](https://github.com/kilotronic/standup-board) when it is installed.
+The `pr` skill's checklist leaves out an item turned off for the repo in the guards' overrides file, by the item's
+id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat-model`). The skills post their progress with [standup](https://github.com/kilotronic/standup-board) when it is installed.
 
 ### The hooks
 
