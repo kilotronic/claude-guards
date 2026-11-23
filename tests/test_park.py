@@ -215,3 +215,10 @@ def test_bad_usage_exits_2(args):
         check=False,
     )
     assert done.returncode == 2
+
+
+def test_the_machine_name_can_be_set_for_a_public_repo(monkeypatch):
+    monkeypatch.setenv("GOAL_MACHINE", "laptop")
+    assert park.machine() == "laptop"
+    monkeypatch.delenv("GOAL_MACHINE")
+    assert park.machine()

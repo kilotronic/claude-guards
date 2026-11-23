@@ -260,7 +260,8 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
   and a branch with no pull request is only pushed. At start-up, a session lists the repo's open pull requests
   labeled `parked`. `park resume <n>` takes the label off, so the work is yours, and says how to check out its
   branch; on the same machine, `claude --resume <session id>` from the comment continues the session itself.
-  Taking a label off is not atomic, so two sessions can rarely both take the same work.
+  Taking a label off is not atomic, so two sessions can rarely both take the same work. The comments name the
+  machine as `$GOAL_MACHINE` when it is set, as `goal` does.
 
 ## Development
 

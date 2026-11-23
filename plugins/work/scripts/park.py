@@ -120,8 +120,14 @@ def resume(number: str, cwd: str, session: str, host: str, run) -> tuple[int, st
     )
 
 
+def machine() -> str:
+    """This machine's name for comments: $GOAL_MACHINE (as `goal` uses it; set it to a name you are happy to
+    publish in a public repo), else the host name."""
+    return os.environ.get("GOAL_MACHINE") or socket.gethostname().split(".")[0]
+
+
 def main(argv: list[str]) -> int:
-    host = socket.gethostname().split(".")[0]
+    host = machine()
     if argv[:1] == ["hook"]:
         try:
             hook = json.loads(sys.stdin.read() or "{}")
