@@ -25,6 +25,7 @@ def _git(*args: str) -> str:
     ).stdout.strip()
 
 
+NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 VERSION = re.compile(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?")
 
 
@@ -57,12 +58,15 @@ def main() -> None:
     tags = set(_git("tag", "--list").splitlines())
     for manifest in sorted(Path("plugins").glob("*/.claude-plugin/plugin.json")):
         plugin = json.loads(manifest.read_text())
+        name = str(plugin.get("name", ""))
+        if not NAME.fullmatch(name):
+            sys.exit(f"{manifest}: name {name!r} is not a plugin name like work")
         version = str(plugin.get("version", ""))
         if not VERSION.fullmatch(version):
             sys.exit(
                 f"{manifest}: version {version!r} is not a version number like 1.4.0"
             )
-        tag = f"{plugin['name']}--v{version}"
+        tag = f"{name}--v{version}"
         if tag in tags:
             continue
         print(f"{tag} {_landed(manifest, version)}")

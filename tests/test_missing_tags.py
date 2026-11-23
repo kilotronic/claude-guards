@@ -152,3 +152,20 @@ def test_a_version_that_is_not_a_version_number_is_refused(tmp_path: Path) -> No
     )
     assert done.returncode != 0
     assert "1.0 beta" in done.stderr
+
+
+def test_a_plugin_name_that_cannot_be_a_tag_is_refused(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _write_plugin(repo, "work", "1.0.0")
+    manifest = repo / "plugins" / "work" / ".claude-plugin" / "plugin.json"
+    manifest.write_text(json.dumps({"name": "my work", "version": "1.0.0"}) + "\n")
+    _commit(repo, "add work")
+    done = subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        cwd=repo,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode != 0
+    assert "my work" in done.stderr

@@ -302,7 +302,8 @@ build a made-up project with a local `origin` and a stand-in `gh`, so none reach
 To release a plugin, raise `version` in its `plugin.json`. When that lands on main, the `tag-releases`
 workflow tags the commit as `<plugin>--v<version>` (for example `work--v1.4.0`). Claude Code checks a
 dependency's version constraint, such as `work ^1.4.0`, against these tags, so a version with no tag leaves
-every plugin that needs it turned off.
+every plugin that needs it turned off. The workflow tags only each plugin's current version, so if a run fails,
+fix it and run it again (or add the tag by hand) before the next version lands.
 
 ## Licence
 
