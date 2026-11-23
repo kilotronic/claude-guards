@@ -28,19 +28,21 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 - **The daily memory list can be used up by a session nobody reads.** A scripted `claude -p` run or a scheduled
   agent starts a session too, so it can take the day's list for about 20 hours. Shape: skip the list when the
   session isn't interactive, if the hook's input can tell.
-- **The merge review check misses merges inside loops and conditionals, and some attached flags.** A merge inside
-  `for …; do …; done` or `if …; then …; fi` is not seen; `-Rowner/repo` (value attached) is not read as the
-  repository, and in `-dt Release 9` the value of `-t` is taken as the pull request; a comment with an empty
-  body stops the check. Shape: the guards' shared parser, as for heredocs below.
 - **The merge review check counts any agent comment, of any commit.** A review of an older commit, or a plain
   status update starting with the agent line, satisfies it, so a push after the review merges with no warning.
   Commits after the review are allowed when they only fix its findings, so requiring the head commit would
-  warn on those too. Shape: give the reviewer's comment a mark of its own (a second line `**Fresh review** of <commit>`, written
-  by the `pr` skill's step 5) that the hook looks for, so an author's update doesn't count. Also unseen: reviews posted with `gh pr review`, merges
-  behind `time`, `timeout`, `sudo` or `bash -c`, `env -C DIR` (which checks the wrong pull request
-  without saying so, so first) and `export GH_REPO=`. A heredoc's body is read as commands (a false warning,
-  or an apostrophe in it hides the real merge after it), and so is an apostrophe in a comment. Shape: read
-  commands with the guards' shared parser, which knows heredocs, comments and wrappers.
+  warn on those too. Shape: give the reviewer's comment a mark of its own (a second line
+  `**Fresh review** of <commit>`, written by the `pr` skill's step 5), and warn when commits after that one
+  change more than the files its findings named.
+- **The merge review check reads some commands wrongly.** It only sees a merge at the start of a command, so a
+  merge after `for`/`while … do`, `if … then`/`else`/`elif`, `{` or `!`, or behind `time`, `timeout`, `sudo`,
+  `bash -c` or `env -C DIR` (which checks the wrong pull request without saying so, so first) is missed;
+  `export GH_REPO=` is ignored; `-Rowner/repo` (value attached) is not read as the repository, and in
+  `-dt Release 9` the value of `-t` is taken as the pull request. A heredoc's body is read as commands (a false
+  warning, or an apostrophe in it hides the real merge after it), and so is an apostrophe in a comment. A
+  comment whose body is null stops the check without a word (`None.lstrip()`). Reviews posted with
+  `gh pr review` are not read. Shape: read commands with the guards' shared parser, which knows loops,
+  heredocs, comments and wrappers.
 - **The merge-permission hook refuses some ordinary merges.** It looks for unsafe characters before reading
   quotes, so a subject like `--subject "feat: x (#17)"` gets no allow; and a short flag with its value
   attached that contains an F (`-RAcmeFoo/app`, `-tFix`) reads as `-F`. Both fail safe: auto mode blocks the
