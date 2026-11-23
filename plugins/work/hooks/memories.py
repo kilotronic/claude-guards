@@ -13,8 +13,11 @@ Two hooks, both silent unless they have something to offer, and never failing th
 A memory is a file `~/.claude/projects/<folder>/memory/<name>.md` (not the MEMORY.md index). `shared:` in its
 frontmatter records the decision: `keep` (personal, never offered again) or the URL of the pull request that
 shared it. `$WORK_MEMORY_MATCH`, a regular expression (case ignored), limits both hooks to memories whose folder
-name or text matches it, for example a team's repo names; unset, every project memory counts, and one that
-doesn't compile turns the hooks off. Standard library only.
+name or text matches it, for example a team's repo names. Unset, the lists other plugins write in
+`~/.config/claude-guards/memory-match/` (one file per plugin, a pattern per line, `#` for comments) are used
+together; with neither, every project memory counts. A setting that doesn't compile turns the hooks off; a
+plugin's line that doesn't compile is skipped, and when none compiles the hooks are off.
+Standard library only.
 """
 
 from __future__ import annotations
@@ -78,24 +81,66 @@ def is_memory(path: Path, projects: Path) -> bool:
     )
 
 
-def matches(path: Path) -> bool:
-    """Whether the memory is in scope: no setting means every memory; a broken setting means none."""
-    pattern = os.environ.get("WORK_MEMORY_MATCH")
-    if not pattern:
-        return True
+def plugin_lists() -> list[str]:
+    """The patterns other plugins supplied, a line each; an unreadable file counts as one broken pattern."""
+    folder = Path.home() / ".config" / "claude-guards" / "memory-match"
+    patterns = []
+    for path in sorted(folder.glob("*")):
+        if path.name.startswith(".") or not path.is_file():
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, ValueError):
+            patterns.append("(")
+            continue
+        patterns += [
+            line.strip()
+            for line in lines
+            if line.strip() and not line.strip().startswith("#")
+        ]
+    return patterns
+
+
+def wanted() -> list[re.Pattern] | None:
+    """The patterns in force: None for every memory, an empty list for none.
+
+    The setting wins; a broken setting means none. Each plugin line is compiled on its own and a broken one is
+    skipped, so one plugin's mistake doesn't turn off the others; when every line is broken, none.
+    """
+    setting = os.environ.get("WORK_MEMORY_MATCH")
+    patterns = [setting] if setting else plugin_lists()
+    if not patterns:
+        return None
+    compiled = []
+    for pattern in patterns:
+        try:
+            compiled.append(re.compile(pattern, re.IGNORECASE))
+        except re.error:
+            pass
+    return compiled
+
+
+def matches(path: Path, patterns: list[re.Pattern] | None) -> bool:
+    """Whether the memory is in scope under `wanted()`'s patterns: its folder name or text matches one."""
     try:
-        wanted = re.compile(pattern, re.IGNORECASE)
+        if patterns is None:
+            return True
         folder = path.parent.parent.name
-        return bool(
-            wanted.search(folder) or wanted.search(path.read_text(encoding="utf-8"))
-        )
-    except (re.error, OSError):
+        text = path.read_text(encoding="utf-8") if patterns else ""
+        return any(p.search(folder) or p.search(text) for p in patterns)
+    except (OSError, ValueError):
         return False
 
 
 def offerable(path: Path, projects: Path) -> bool:
     """A memory in scope that is not personal and not yet decided."""
-    if not is_memory(path, projects) or not matches(path):
+    if not is_memory(path, projects):
+        return False
+    try:
+        patterns = wanted()
+    except (OSError, ValueError):
+        return False
+    if not matches(path, patterns):
         return False
     found = fields(path)
     return found.get("type") != "user" and not found.get("shared")
@@ -132,8 +177,12 @@ def sweep(projects: Path, stamp: Path, now: float) -> str:
     except (OSError, ValueError):
         pass
     undecided, sent = [], []
+    try:
+        patterns = wanted()
+    except (OSError, ValueError):
+        patterns = []
     for path in sorted(projects.glob("*/memory/*.md")):
-        if not is_memory(path, projects) or not matches(path):
+        if not is_memory(path, projects) or not matches(path, patterns):
             continue
         found = fields(path)
         if found.get("type") == "user":

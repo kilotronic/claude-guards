@@ -40,8 +40,19 @@ def memory(
 
 
 @pytest.fixture(autouse=True)
-def no_match(monkeypatch: pytest.MonkeyPatch) -> None:
+def no_match(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("WORK_MEMORY_MATCH", raising=False)
+    # Never the real lists folder: Path.home() reads HOME, and USERPROFILE on Windows.
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+
+
+def plugin_list(tmp_path: Path, name: str, text: str) -> Path:
+    """A list another plugin wrote, as its own start-up hook would."""
+    path = tmp_path / "home" / ".config" / "claude-guards" / "memory-match" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
 
 
 @pytest.fixture
@@ -83,6 +94,55 @@ def test_a_broken_setting_offers_nothing_and_never_fails(
     p = memory(projects / "-Users-x-Code-gh-widgets" / "memory", "a", "x")
     assert not memories.offerable(p, projects)
     assert memories.sweep(projects, tmp_path / "stamp", now=time.time()) == ""
+
+
+def test_a_plugin_can_supply_the_list(projects: Path, tmp_path: Path) -> None:
+    plugin_list(tmp_path, "acme", "acme|widget\n")
+    plugin_list(tmp_path, "other", "# a comment line\nsprocket\n\n")
+    plugin_list(tmp_path, ".hidden", "game\n")
+    folder = projects / "-Users-x-Code-gh" / "memory"
+    assert memories.offerable(memory(folder, "a", "ACME's deploy"), projects)
+    assert memories.offerable(memory(folder, "b", "the sprocket rule"), projects)
+    assert not memories.offerable(memory(folder, "c", "game night"), projects)
+
+
+def test_the_setting_wins_over_plugin_lists(
+    projects: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plugin_list(tmp_path, "acme", "acme\n")
+    monkeypatch.setenv("WORK_MEMORY_MATCH", "game")
+    folder = projects / "-Users-x-Code-gh" / "memory"
+    assert memories.offerable(memory(folder, "a", "game night"), projects)
+    assert not memories.offerable(memory(folder, "b", "ACME's deploy"), projects)
+
+
+def test_an_empty_list_offers_every_memory(projects: Path, tmp_path: Path) -> None:
+    plugin_list(tmp_path, "empty", "# nothing yet\n")
+    p = memory(projects / "-Users-x-Code-gh" / "memory", "a", "anything")
+    assert memories.offerable(p, projects)
+
+
+def test_a_broken_line_is_skipped_and_the_rest_still_count(
+    projects: Path, tmp_path: Path
+) -> None:
+    # Each line on its own, as the setting would be: `(?i)` is refused inside a group joined with others.
+    plugin_list(tmp_path, "acme", "(unclosed\n(?i)acme\n")
+    plugin_list(tmp_path, "other", "widget\n")
+    folder = projects / "-Users-x-Code-gh" / "memory"
+    assert memories.offerable(memory(folder, "a", "ACME's deploy"), projects)
+    assert memories.offerable(memory(folder, "b", "the widget rule"), projects)
+    assert not memories.offerable(memory(folder, "c", "game night"), projects)
+
+
+def test_lists_with_only_broken_or_unreadable_lines_offer_nothing(
+    projects: Path, tmp_path: Path
+) -> None:
+    p = memory(projects / "-Users-x-Code-gh" / "memory", "a", "anything")
+    plugin_list(tmp_path, "broken", "(unclosed\n")
+    assert not memories.offerable(p, projects)
+    path = plugin_list(tmp_path, "broken", "")
+    path.write_bytes(b"\xff\xfe acme\n")
+    assert not memories.offerable(p, projects)
 
 
 def test_personal_and_decided_memories_are_not_offered(projects: Path) -> None:
@@ -148,6 +208,13 @@ def test_the_sweep_follows_the_setting(
 ) -> None:
     memory(swept / "-Users-x-Code-gh-acme" / "memory", "deploy", "rule e")
     monkeypatch.setenv("WORK_MEMORY_MATCH", "acme")
+    text = memories.sweep(swept, tmp_path / "stamp", now=time.time())
+    assert "`deploy`" in text and "open-one" not in text
+
+
+def test_the_sweep_follows_a_plugin_list(swept: Path, tmp_path: Path) -> None:
+    memory(swept / "-Users-x-Code-gh-acme" / "memory", "deploy", "rule e")
+    plugin_list(tmp_path, "acme", "acme\n")
     text = memories.sweep(swept, tmp_path / "stamp", now=time.time())
     assert "`deploy`" in text and "open-one" not in text
 
