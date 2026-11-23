@@ -1,6 +1,6 @@
 ---
 name: pr
-allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh issue *), Bash(gh run *), Bash(standup list*), Bash(open *), Agent, Skill(code-review)
+allowed-tools: Bash(git fetch *), Bash(git rebase origin/*), Bash(git status*), Bash(git log *), Bash(git rev-parse *), Bash(git push --force-with-lease origin HEAD), Bash(gh pr view *), Bash(gh pr create *), Bash(gh pr edit *), Bash(gh pr comment *), Bash(gh pr checks *), Bash(gh issue list *), Bash(gh run view *), Bash(gh run list *), Bash(gh run watch *), Bash(standup list*), Bash(goal merged *), Agent, Skill(code-review)
 description:
   Open a pull request for the current branch (rebase, docs, checks, a fresh reviewer agent), or with "merge"
   arm auto-merge and confirm it landed. Use for "open a PR", "ship this branch", "merge it".
@@ -10,6 +10,8 @@ Open a pull request for the current branch, or with `merge`, merge it.
 
 **The repo's own CLAUDE.md wins** over anything here: its test and lint commands, its review rules, what its
 pull request must say, and who may merge.
+
+`main` here means the repo's default branch; use its real name (`master`, `trunk`) where it differs.
 
 This skill assumes squash merges: each pull request becomes one commit on `main`, titled and described from the
 pull request, so the pull request's title and description are the commit message. A repo that merges another
@@ -39,8 +41,11 @@ First check the branch isn't spent:
 gh pr view --json number,url,state 2>/dev/null
 ```
 
-`MERGED` or `CLOSED`: the branch's pull request is done. Start a new branch from `origin/main` and bring over only
-the commits made after it merged (`git switch -c <new-name> origin/main`, then `git cherry-pick <commits>`).
+- `MERGED`: the branch is spent. Start a new branch from `origin/main` and bring over only the commits made after
+  it merged (`git switch -c <new-name> origin/main`, then `git cherry-pick <commits>`).
+- `CLOSED` without merging: none of its work landed. Ask your person whether to reopen it
+  (`gh pr reopen <n>`) or drop it; never move only some of its commits.
+
 Otherwise:
 
 ```bash
@@ -95,7 +100,7 @@ task:
 
 **Pull-request checklist.** Leave out of the brief an item turned off for the repo in the overrides file the
 guards plugin reads (its README, "Turning a rule off for a repo"): `overrides.json` at the guards plugin's root if
-it ships one, else `$CLAUDE_GUARDS_OVERRIDES` when it is set, else `~/.config/claude-guards/overrides.json`. An item is off when its id is listed with a non-empty `reason`
+it ships one (in the plugin cache, `~/.claude/plugins/cache/*/guards/*/overrides.json`), else `$CLAUDE_GUARDS_OVERRIDES` when it is set, else `~/.config/claude-guards/overrides.json`. An item is off when its id is listed with a non-empty `reason`
 under the repo's `owner/name` in lower case, else, when the repo has no entry of its own, under the first group
 pattern that matches it (`my-org/*`), and the id is not in the file's `_locked` list (which is not a repo).
 With no file, or none of these, copy all five:
@@ -145,9 +150,9 @@ In the background (`run_in_background: true`), one call:
 gh pr checks <number> --watch --interval 60
 ```
 
-- A failure: read the failing job's log (`gh run view <run-id> --log-failed`), fix, commit, push, watch again.
-  A fix that changes behavior, not only what the check flagged: disarm auto-merge
-  (`gh pr merge <n> --disable-auto`) before pushing it, and go back through step 5.
+- A failure: read the failing job's log (`gh run view <run-id> --log-failed`), fix and commit. Push as in step 3
+  (auto-merge disarmed first), then re-arm through M1 and watch again. A fix that changes behavior, not only what
+  the check flagged, goes back through step 5 first.
 - All passing: with auto-merge armed, confirm it landed ([M2](#m2-confirm-it-landed)); otherwise report whose
   decision or review it waits for.
 
@@ -176,7 +181,8 @@ standup list    # if standup is installed
   has no comment starting with the agent line. Commits after the reviewed one must be only fixes for its
   findings or for a failing check, or a rebase that replays the same change; anything else goes back through
   step 5.
-- `CONFLICTING`: rebase onto `origin/main` (step 1), push, and arm again (step 3 disarmed it before the push).
+- `CONFLICTING`: rebase onto `origin/main` (step 1), push (step 3), and come back here. Conflicts resolved by hand
+  change code after the review: go back through step 5.
 - Check the repo's open GitHub issues first (`gh issue list --state open`): if another issue covers the same work
   or the same files, name it in your report.
 
@@ -209,7 +215,8 @@ Report the result; on failure, read the log (`gh run view <run-id> --log-failed`
 
 ### M4. Clean up
 
-If the repo doesn't delete merged branches on GitHub, delete it (`git push origin --delete <branch>`). Remove
-the local worktree and branch from outside the worktree (`git worktree remove <path>`, `git branch -D
-<branch>`). If this session's working directory is that worktree, leave it and say it can be removed once the
+First `goal merged <branch>`: exit 0 means every commit on the branch is on main. Any other answer: stop and
+look before deleting anything (a local commit after the reviewed one is lost otherwise). Then, if the repo
+doesn't delete merged branches on GitHub, delete it (`git push origin --delete <branch>`). Remove the local
+worktree and branch from outside the worktree (`git worktree remove <path>`, `git branch -D <branch>`). If this session's working directory is that worktree, leave it and say it can be removed once the
 session ends.
