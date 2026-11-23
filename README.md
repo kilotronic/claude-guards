@@ -218,7 +218,7 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 | `add-knowledge` | Moves a memory Claude saved into the file every session reads (a repo's CLAUDE.md or the team's rules) by pull request, or marks it personal |
 
 The `pr` skill's checklist leaves out an item turned off for the repo in the guards' overrides file, by the item's
-id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat-model`). The skills post their progress with [standup](https://github.com/kilotronic/standup-board) when it is installed.
+id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat-model`).
 
 ### The hooks
 

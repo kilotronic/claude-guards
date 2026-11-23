@@ -3,8 +3,8 @@ name: work-start
 description:
   Start one todo item properly. Proves it is still open, makes the worktree and branch off origin/main, commits
   the claim mark with goal claim and opens the work's pull request at once (the open pull request is the
-  claim), checks again that no lower-numbered pull request marks the same item, posts the standup step, and
-  restates what done means. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the
+  claim), checks again that no lower-numbered pull request marks the same item, and restates what done
+  means. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the
   next skill.
 ---
 
@@ -65,17 +65,7 @@ goal claim '<the entry's title>'        # again, now that the pull request is op
 
 Then the repo's own set-up (its README or CLAUDE.md), in that worktree.
 
-## 4. Post the standup step
-
-If standup is installed, from the worktree, so the branch is detected:
-
-```bash
-standup status --goal '<the session goal>' --step 'started: <title>'
-```
-
-A subagent posts its own child row with `--as-subagent '<label>'` instead.
-
-## 5. Say what done means
+## 4. Say what done means
 
 Restate in plain words, to the person:
 

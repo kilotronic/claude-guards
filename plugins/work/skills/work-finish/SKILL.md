@@ -3,7 +3,7 @@ name: work-finish
 description:
   Finish one claimed todo item. In the work's own pull request, removes the entry (the claim ends when it
   merges), files follow-ups as new entries, runs the repo's gates and arms auto-merge; after it shows MERGED,
-  removes the worktree and branches and posts the last standup step. Also abandons an item cleanly by closing
+  removes the worktree and branches. Also abandons an item cleanly by closing
   its pull request. Use for "finish this", "land it", "wrap up", "abandon this item".
 ---
 
@@ -21,7 +21,7 @@ description:
   rules require. Fix the findings before merge.
 - The pull request has been open, ready, since work-start. Finish it with the `pr` skill, with its fresh
   review. Arm auto-merge only now, once its head is your pushed commit
-  (`gh pr view --json headRefOid -q .headRefOid` equals `git rev-parse HEAD`), after `standup list`.
+  (`gh pr view --json headRefOid -q .headRefOid` equals `git rev-parse HEAD`).
 
 ## 2. After merge
 
@@ -43,9 +43,6 @@ git worktree remove ../<repo>-<slug>      # refuses if dirty; look rather than -
 git branch -D <branch>
 git push origin --delete <branch>         # if the repo doesn't delete merged branches itself
 ```
-
-If standup is installed, post the last step, saying what is true:
-`standup status --step 'merged #<n>: <title>'`.
 
 ## 3. If the work is abandoned instead
 
