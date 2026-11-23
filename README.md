@@ -197,6 +197,10 @@ Who you are comes from `--as`, else `$GOAL_AS`, else the Claude Code session, pl
 sessions, set a stable `$GOAL_AS`. The mark is public wherever the todo file is: in a public repo, set
 `$GOAL_MACHINE` and `$GOAL_AS` to names you are happy to publish.
 
+On a work branch, a pull request's claim is yours only when it comes from that branch: two sessions can share a
+name (subagents of one session, or one stable `$GOAL_AS`), never a branch. On the default branch, and for a mark
+on the default branch, the name decides.
+
 `goal merged <branch>` says whether a branch's work is on main: every commit there as the same patch, or a
 merged pull request ending at the branch's tip, as a squash merge leaves it.
 

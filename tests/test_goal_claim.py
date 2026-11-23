@@ -313,3 +313,51 @@ def test_a_claim_can_be_released_while_the_milestone_is_overdue(tmp_path: Path) 
     wt = work_tree(p, tmp_path)
     rc, _, err = p.run("release", "Add a snooze button", cwd=wt)
     assert rc == 0, err
+
+
+def test_goal_on_another_work_branch_is_not_told_to_finish_a_same_named_claim(
+    tmp_path: Path,
+) -> None:
+    """Plain `goal` decides "yours" by branch on a work branch, as `goal claim` does."""
+    p = make_project(tmp_path)
+    pr = p.open_claim("Add a snooze button", "agent-a", 7)
+    _, out = p.json(cwd=work_tree(p, tmp_path))
+    assert out["next"]["kind"] != "own"
+    _, out = p.json(cwd=pr_tree(p, tmp_path, pr))
+    assert out["next"]["kind"] == "own"
+    # Off any work branch, the name still decides, so a stable $GOAL_AS resumes its claim.
+    _, out = p.json()
+    assert out["next"]["kind"] == "own"
+
+
+def test_only_the_later_pull_requests_branch_is_told_to_stop(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    first = p.open_claim("Add a snooze button", "agent-a", 7)
+    later = p.open_claim("Add a snooze button", "agent-a", 9)
+    _, out = p.json(cwd=pr_tree(p, tmp_path, first))
+    assert not any("you hold the later claim" in w for w in out["warnings"])
+    _, out = p.json(cwd=pr_tree(p, tmp_path, later))
+    assert any("you hold the later claim" in w and "#9" in w for w in out["warnings"])
+
+
+def test_your_own_mark_on_main_is_already_yours(tmp_path: Path) -> None:
+    p = make_project(
+        tmp_path, todo=claimed(TODO, "Add a snooze button", "agent-a", "2026-11-21")
+    )
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=work_tree(p, tmp_path))
+    assert rc == 0, err
+    assert "already yours" in out
+
+
+def test_a_pull_request_later_than_a_mark_on_main_is_told_to_close(
+    tmp_path: Path,
+) -> None:
+    p = make_project(
+        tmp_path, todo=claimed(TODO, "Add a snooze button", "agent-b", "2026-11-21")
+    )
+    later = p.open_claim("Add a snooze button", "agent-a", 9, replace_mark=True)
+    rc, out, err = p.run(
+        "claim", "Add a snooze button", cwd=pr_tree(p, tmp_path, later)
+    )
+    assert rc == 3
+    assert "already claimed on the default branch" in out + err

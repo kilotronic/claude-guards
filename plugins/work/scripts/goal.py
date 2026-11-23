@@ -383,6 +383,17 @@ class Me:
     named: bool = (
         True  # False: only the login name, which every session of this user shares
     )
+    branch: str | None = (
+        None  # the work branch checked out here; None on the default branch or a detached HEAD
+    )
+
+    def holds(self, claim: Claim) -> bool:
+        """The claim is ours. On a work branch, a pull request's claim is ours when it comes from this branch: two
+        sessions can share a name (subagents of one session, one stable $GOAL_AS), never a branch. Elsewhere, and
+        for a mark on the default branch, which has no branch, the name decides."""
+        if claim.pr and self.branch:
+            return claim.head == self.branch
+        return (claim.who, claim.machine) == (self.who, self.machine)
 
 
 def _date(text: str) -> dt.date | None:
@@ -419,11 +430,7 @@ def decide(
 ) -> tuple[dict, list[str]]:
     """The next step and any warnings, in the fixed order."""
     claims = [e for e in todo.entries if e.claim]
-    own = [
-        e
-        for e in claims
-        if e.claim and (e.claim.who, e.claim.machine) == (me.who, me.machine)
-    ]
+    own = [e for e in claims if e.claim and me.holds(e.claim)]
     if own:
         return {
             "kind": "own",
@@ -932,6 +939,8 @@ def answer(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
         out.update(status="unclear", missing=missing, next=None)
         return UNCLEAR, out
     me = me_from_env(args.as_)
+    work = repo.branch_name()
+    me.branch = work if work != repo.base else None
     out["uncounted_claims"] = state.uncounted
     out["warnings"] += [
         f'the claim mark on "{t}" is not counted: no open pull request carries it (push its branch and open the'
@@ -960,7 +969,7 @@ def answer(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
             f'you hold the later claim on "{title}" in #{c.pr}: stop, and close it, or move its work to another'
             " item with goal release"
             for c in later
-            if (c.who, c.machine) == (me.who, me.machine)
+            if me.holds(c)
         ]
     if not me.named:
         out["warnings"].append(
@@ -1126,6 +1135,7 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
         raise Unclear("; ".join(missing) or "this repo is frozen")
     entry = find(state.todo, args.item)
     me = me_from_env(args.as_)
+    me.branch = branch
     if not me.named:
         raise Unclear(NO_NAME)
     if not state.claims_checked:
@@ -1140,11 +1150,7 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
     held = entry.claim
     # A pull request is ours when its branch is this one: two sessions can share a name (subagents of one session,
     # or one stable $GOAL_AS), never a branch. A mark on the default branch has no branch, so its name decides.
-    if held and (
-        held.head == branch
-        if held.pr
-        else (held.who, held.machine) == (me.who, me.machine)
-    ):
+    if held and me.holds(held):
         return OK, {
             "status": "ok",
             "branch": branch,
@@ -1160,7 +1166,7 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
                 for title, holders in state.conflicts
                 if title == entry.title
                 for c in holders[1:]
-                if c.head == branch
+                if me.holds(c)
             ),
             None,
         )

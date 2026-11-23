@@ -47,6 +47,8 @@ gh pr create --title '<type>: <the work, in the imperative>' --body '<what and w
 goal claim '<the entry's title>'        # again, now that the pull request is open: settles a tie
 ```
 
+- **The first `goal claim` says `already yours`** for a mark already on the default branch: there is no mark
+  commit to push, so make the work's first commit before opening the pull request.
 - **The first `goal claim` exits 3**: an open pull request already marks the item (it names it), or the item
   needs the owner. Remove the worktree and branch, and go back to `goal`.
 - **Open the pull request now**, ready (not draft), and **don't arm auto-merge**: work-finish does that

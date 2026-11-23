@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -136,11 +137,15 @@ class Project:
         updated: str = "2026-11-21",
         machine: str = "box1",
         then_delete: bool = False,
+        replace_mark: bool = False,
     ) -> dict:
         """Push a work branch whose first commit marks `title` as `who`'s, and list its open pull request #`number`,
-        last active on `updated`. With `then_delete`, a second commit deletes the entry, as work-finish does."""
+        last active on `updated`. With `then_delete`, a second commit deletes the entry, as work-finish does; with
+        `replace_mark`, the branch swaps a mark main already has for its own."""
         name = f"work/{who}-{number}"
         base = self.origin_file("docs/todo.md")
+        if replace_mark:
+            base = re.sub(r" \[claimed by [^\]]+\]", "", base)
         tip = self.branch(
             name, updated, {"docs/todo.md": claimed(base, title, who, updated, machine)}
         )
