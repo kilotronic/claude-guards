@@ -252,7 +252,24 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
   still waiting, and those whose sharing pull request may have merged. `shared: keep` in a memory's frontmatter
   marks it personal; `shared: <pull request URL>` records that it was sent. Set `$WORK_MEMORY_MATCH` (a regular
   expression, case ignored, for example your team's repo names) to offer only memories whose folder name or text
-  matches; unset, every project memory is offered.
+  matches. A team's own plugin can set this for everyone who installs it instead: its start-up hook copies a file
+  of patterns (one per line, `#` for comments) into `~/.config/claude-guards/memory-match/`, named after the
+  plugin, and the hook uses every file there together, unless `$WORK_MEMORY_MATCH` is set. With neither, every
+  project memory is offered. A pattern that doesn't compile turns the offers off. Hooks of different plugins run
+  at the same time, so the first session after installing may list memories before the file is there.
+
+  ```json
+  {
+    "matcher": "startup",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "mkdir -p ~/.config/claude-guards/memory-match && cp \"${CLAUDE_PLUGIN_ROOT}/memory-match\" ~/.config/claude-guards/memory-match/my-team"
+      }
+    ]
+  }
+  ```
+
 - **Work stopped by a usage limit is parked on its pull request** (`scripts/park.py`). When a session stops on a
   usage limit, the hook commits the changes to files git already tracks on the work's branch as `wip: parked
 at a usage limit` (without the commit hooks, which can't run there; new files stay put and are counted in the

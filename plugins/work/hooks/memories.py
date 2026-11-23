@@ -13,8 +13,10 @@ Two hooks, both silent unless they have something to offer, and never failing th
 A memory is a file `~/.claude/projects/<folder>/memory/<name>.md` (not the MEMORY.md index). `shared:` in its
 frontmatter records the decision: `keep` (personal, never offered again) or the URL of the pull request that
 shared it. `$WORK_MEMORY_MATCH`, a regular expression (case ignored), limits both hooks to memories whose folder
-name or text matches it, for example a team's repo names; unset, every project memory counts, and one that
-doesn't compile turns the hooks off. Standard library only.
+name or text matches it, for example a team's repo names. Unset, the lists other plugins write in
+`~/.config/claude-guards/memory-match/` (one file per plugin, a pattern per line, `#` for comments) are used
+together; with neither, every project memory counts. A pattern that doesn't compile turns the hooks off.
+Standard library only.
 """
 
 from __future__ import annotations
@@ -78,9 +80,26 @@ def is_memory(path: Path, projects: Path) -> bool:
     )
 
 
+def plugin_lists() -> str:
+    """The patterns other plugins supplied, joined into one; empty when there are none."""
+    folder = Path.home() / ".config" / "claude-guards" / "memory-match"
+    patterns = []
+    for path in sorted(folder.glob("*")):
+        if path.name.startswith(".") or not path.is_file():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                patterns.append(f"(?:{line})")
+    return "|".join(patterns)
+
+
 def matches(path: Path) -> bool:
-    """Whether the memory is in scope: no setting means every memory; a broken setting means none."""
-    pattern = os.environ.get("WORK_MEMORY_MATCH")
+    """Whether the memory is in scope: no setting and no list means every memory; a broken one means none."""
+    try:
+        pattern = os.environ.get("WORK_MEMORY_MATCH") or plugin_lists()
+    except OSError:
+        return False
     if not pattern:
         return True
     try:
