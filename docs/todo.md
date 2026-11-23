@@ -62,6 +62,12 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
   to pull requests survive the upgrade. Once none are left, drop them, their warning and `goal release
 --holder`, so open pull requests are the one place claims are read. `claims_from` in `--json` names the
   default branch, where it now means the branch the pull requests merge into.
+- **Sessions sharing a name in the main checkout share their claims.** Off a work branch, `goal` decides whose
+  claim it is by name, so two subagents of one session (one `session-` label) starting there are each told to
+  "finish" the first one's item. Shape: say in the README and the next skill that parallel sessions each set
+  their own `--as` or `$GOAL_AS`; have the "finish" answer give the pull request's real branch (`Claim.head`),
+  not one built from the title; test the detached-HEAD case; drop the comment in `claim` that repeats
+  `Me.holds`.
 - **Small gaps in goal found in review.** `gh repo view` follows gh's default repo, which in a fork clone can be the
   upstream, not origin; a claimed entry whose title is edited locally reads as a mark no pull request carries;
   claims are read from the first 200 open pull requests only; a branch that deleted a claimed entry is read back
