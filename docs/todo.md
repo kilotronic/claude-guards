@@ -25,6 +25,15 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 
 ## Next
 
+- **The merge review check counts any agent comment, of any commit.** A review of an older commit, or a plain
+  status update starting with the agent line, satisfies it, so a push after the review merges with no warning.
+  Commits after the review are allowed when they only fix its findings, so requiring the head commit would
+  warn on those too. Shape: the reviewer names the commit it reviewed, and the hook warns only when commits
+  after it change more than the findings' files. Also unseen: reviews posted with `gh pr review`, merges
+  behind `time`, `timeout`, `sudo` or `bash -c`, `env -C DIR` (which checks the wrong pull request
+  without saying so, so first) and `export GH_REPO=`. A heredoc's body is read as commands (a false warning,
+  or an apostrophe in it hides the real merge after it), and so is an apostrophe in a comment. Shape: read
+  commands with the guards' shared parser, which knows heredocs, comments and wrappers.
 - **The merge-permission hook refuses some ordinary merges.** It looks for unsafe characters before reading
   quotes, so a subject like `--subject "feat: x (#17)"` gets no allow; and a short flag with its value
   attached that contains an F (`-RAcmeFoo/app`, `-tFix`) reads as `-F`. Both fail safe: auto mode blocks the

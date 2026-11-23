@@ -1,5 +1,5 @@
 {
-  "description": "Lets an agent run a plain gh pr merge in auto mode, never with --admin or --body-file",
+  "description": "Lets an agent run a plain gh pr merge in auto mode, never with --admin or --body-file; warns at gh pr merge when the pull request has no fresh-review comment",
   "hooks": {
     "PreToolUse": [
       {
@@ -9,6 +9,11 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/allow-merge.py\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/review-check.py\"",
+            "timeout": 15
           }
         ]
       }
