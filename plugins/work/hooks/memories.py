@@ -56,7 +56,9 @@ def fields(path: Path) -> dict:
         return {}
     found = {}
     for key in ("name", "type", "shared"):
-        value = re.search(rf"^\s*{key}:\s*(.+?)\s*$", match.group(1), re.MULTILINE)
+        value = re.search(
+            rf"^[ \t]*{key}:[ \t]*(\S.*?)[ \t]*$", match.group(1), re.MULTILINE
+        )
         if value:
             found[key] = value.group(1).strip("'\"")
     return found

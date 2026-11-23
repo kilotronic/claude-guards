@@ -243,3 +243,14 @@ def test_bad_input_never_fails_the_session(tmp_path: Path) -> None:
 
 def test_it_defers_annotations_so_3_9_can_load_it() -> None:
     assert "from __future__ import annotations" in SCRIPT.read_text()
+
+
+def test_an_empty_shared_line_counts_as_undecided(projects: Path) -> None:
+    p = projects / "-Users-x-Code-gh-widgets" / "memory" / "e.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        "---\nname: e\nshared:\ntype: feedback\n---\n\nrule\n", encoding="utf-8"
+    )
+    assert "shared" not in memories.fields(p)
+    assert memories.fields(p)["type"] == "feedback"
+    assert memories.offerable(p, projects)
