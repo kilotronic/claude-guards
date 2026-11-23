@@ -25,6 +25,13 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 
 ## Next
 
+- **Park's loose ends.** A file the agent already staged still goes into the park commit, past the secret scan;
+  `park resume` says "is yours" even when taking the label off fails (no write access); a new folder counts as one
+  untracked file. Shape: commit only tracked paths (`git commit -- $(git diff --name-only HEAD)`), check the label
+  edit's exit code, count with `git ls-files --others --exclude-standard`.
+- **`goal`'s row reading is quiet about slips.** A `rows` folder that doesn't exist shows no rows and no warning; a
+  `Waits on` part that isn't a number or a span is skipped; a phase mapped to the defects heading goes last; a bad
+  claim date on a row names the todo file, not the row file. Shape: name each as unclear or a warning.
 - **The daily memory list can be used up by a session nobody reads.** A scripted `claude -p` run or a scheduled
   agent starts a session too, so it can take the day's list for about 20 hours. Shape: skip the list when the
   session isn't interactive, if the hook's input can tell.
