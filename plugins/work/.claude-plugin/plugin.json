@@ -1,7 +1,7 @@
 {
   "name": "work",
   "version": "1.0.1",
-  "description": "The goal command and the skills around it: what to work on next, claiming it in the todo file, and landing it; a hook lets an agent run a plain gh pr merge in auto mode",
+  "description": "The goal command and the skills around it: what to work on next, claiming it in the todo file, and landing it; hooks let an agent run a plain gh pr merge in auto mode and warn at a merge with no fresh review",
   "author": {
     "name": "Kilotronic"
   },
