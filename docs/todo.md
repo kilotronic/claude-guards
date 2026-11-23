@@ -25,6 +25,10 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 
 ## Next
 
+- **The merge-permission hook refuses some ordinary merges.** It looks for unsafe characters before reading
+  quotes, so a subject like `--subject "feat: x (#17)"` gets no allow; and a short flag with its value
+  attached that contains an F (`-RAcmeFoo/app`, `-tFix`) reads as `-F`. Both fail safe: auto mode blocks the
+  merge as it would without the hook. Shape: read the words first, then check each unquoted part.
 - **goal follows the README's link to the goals file.** `**Goals:**` is reported as a path only; the milestone
   and its finish line the linked file states are not read, so `goal` can't say when a milestone looks done.
 - **goal reads a plan's ordered rows, not only todo entries.** Repos that keep their order in a plan's table

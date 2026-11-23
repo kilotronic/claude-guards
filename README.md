@@ -5,7 +5,7 @@ Two [Claude Code](https://code.claude.com) plugins for agents working in a repos
 - **guards**: hooks that stop risky git, GitHub and shell commands before an agent runs them. Each refusal says
   why and what to do instead, so the agent can fix its own command and carry on.
 - **work**: the `goal` command, which answers "what should I work on next?" from what the repo states in
-  writing, and the skills that claim an item, build it and land it. See [The work plugin](#the-work-plugin).
+  writing, the skills that claim an item, build it and land it, and hooks around merging. See [The work plugin](#the-work-plugin).
 
 The guards were written for several agents working in one repository at once, each in its own git worktree.
 They suit a single agent too. Note that a plain clone is its own main checkout, so the main-checkout guards
@@ -199,6 +199,16 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 | `branch-prune` | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default            |
 
 The skills post their progress with [standup](https://github.com/kilotronic/standup-board) when it is installed.
+
+### The hooks
+
+- **Agents may merge pull requests in auto mode** (`allow-merge.py`). Claude Code's auto mode refuses
+  `gh pr merge` even after the person said yes, so in auto mode this hook allows a Bash call that is only
+  `gh pr merge …`: nothing chained to it (`;`, `&&`, `|`), no redirection, substitution, wildcard or newline,
+  and never `--admin` or `--body-file` (`-F`). It allows every such merge, in any repo the agent can reach: it
+  can't see whether the person said yes, so a repo that wants to be asked first says so in its written rules,
+  and the agent asks. In other permission modes it says nothing, and the usual prompt asks the person. The
+  guards plugin's `no-admin-merge` refuses `--admin` on its own.
 
 ## Development
 
