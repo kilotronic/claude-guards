@@ -135,12 +135,13 @@ The facts live in the README, where people read them too, under one heading, as 
 ```
 
 **The record of work** is what the `**Work is recorded in:**` line names, and `goal` says which (`record` in
-`--json`). A todo file, in backticks or a link, is read as below. A line that names GitHub issues instead (for
-example `- **Work is recorded in:** GitHub issues on the team board`) gets `record: issues` and no item: the
+`--json`). A todo file, in backticks or a link, is read as below. A line that starts with "GitHub issues"
+instead (for example `- **Work is recorded in:** GitHub issues on the team board`) gets `record: issues` and no
+item: the
 skills then find, claim and finish work through issues, by the repo's own issue-tracking skill or rules when it
-has them, else by a few `gh` steps (work-start's "Work kept in GitHub issues"). On a line that names GitHub
-issues, only a path with a `/` or `.` is taken for a todo file, so a label in backticks or a link to the issues
-is not. A line that names neither is unclear, and `goal` says so.
+has them, else by a few `gh` steps (work-start's "Work kept in GitHub issues"). On a line that starts with GitHub
+issues, nothing on it is taken for a todo file, and a link to a web address never is. A line that names
+neither is unclear, and `goal` says so.
 
 For a todo file, `goal` needs the file, the limit, and either the milestone or a `**Goals:**` line linking the
 file that states it. For GitHub issues it needs neither the limit nor a milestone, and reads no

@@ -113,3 +113,37 @@ def test_a_label_in_backticks_is_not_a_todo_file(tmp_path: Path) -> None:
     rc, out = p.json()
     assert rc == 0, out
     assert out["record"] == "issues"
+
+
+def test_a_link_still_comes_before_a_backticked_word(tmp_path: Path) -> None:
+    where = "the `Next` list in [docs/todo.md](docs/todo.md)"
+    p = make_project(
+        tmp_path,
+        readme=README.replace(TODO_LINE, f"- **Work is recorded in:** {where}"),
+    )
+    rc, out = p.json()
+    assert rc == 0, out
+    assert out["record"] == "todo"
+
+
+def test_a_repo_name_in_backticks_on_an_issues_line_is_not_a_todo_file(
+    tmp_path: Path,
+) -> None:
+    p = make_project(
+        tmp_path, readme=issues_readme("GitHub issues in `example/widgets`"), todo=None
+    )
+    rc, out = p.json()
+    assert rc == 0, out
+    assert out["record"] == "issues"
+
+
+def test_a_todo_line_that_mentions_issues_stays_a_todo_line(tmp_path: Path) -> None:
+    where = "`TODO` (bugs come in as GitHub issues)"
+    p = make_project(
+        tmp_path,
+        readme=README.replace(TODO_LINE, f"- **Work is recorded in:** {where}"),
+        extra={"TODO": "## Defects\n\n## Next\n\n- **Add a snooze button.**\n"},
+    )
+    rc, out = p.json()
+    assert rc == 0, out
+    assert out["record"] == "todo"

@@ -206,27 +206,23 @@ def _path_in(value: str) -> str | None:
     return m.group(1) if m else None
 
 
-ISSUES_WORDS = re.compile(r"\bgithub issues?\b", re.IGNORECASE)
-
-
-def todo_path(facts: dict[str, str]) -> str | None:
-    """The todo file the **Work is recorded in:** line names: its first link or backticked path that is not a web
-    address. On a line that also names GitHub issues, only a path with a `/` or `.` counts, so a quoted label
-    or a link to the issues is not taken for a file."""
-    value = facts.get("work is recorded in")
-    if not value:
-        return None
-    found = re.findall(r"\]\(([^)\s#]+)|`([^`\s]+)`", value)
-    paths = [a or b for a, b in found if "://" not in (a or b)]
-    if ISSUES_WORDS.search(value):
-        paths = [x for x in paths if "/" in x or "." in x]
-    return paths[0] if paths else None
+# The line names GitHub issues when it starts with those words, bare or as a link's text.
+ISSUES_LINE = re.compile(r"\[?github issues?\b", re.IGNORECASE)
 
 
 def in_issues(facts: dict[str, str]) -> bool:
-    """The **Work is recorded in:** line names GitHub issues and no todo file."""
-    value = facts.get("work is recorded in") or ""
-    return todo_path(facts) is None and bool(ISSUES_WORDS.search(value))
+    """The **Work is recorded in:** line starts with "GitHub issues": the repo keeps its work there."""
+    return bool(ISSUES_LINE.match(facts.get("work is recorded in") or ""))
+
+
+def todo_path(facts: dict[str, str]) -> str | None:
+    """The todo file: the line's first link that is not a web address, else its first backticked path."""
+    value = facts.get("work is recorded in")
+    if not value or in_issues(facts):
+        return None
+    links = [x for x in re.findall(r"\]\(([^)\s#]+)", value) if "://" not in x]
+    m = re.search(r"`([^`\s]+)`", value)
+    return links[0] if links else (m.group(1) if m else None)
 
 
 def goals_path(facts: dict[str, str]) -> str | None:
