@@ -5,7 +5,8 @@ Two [Claude Code](https://code.claude.com) plugins for agents working in a repos
 - **guards**: hooks that stop risky git, GitHub and shell commands before an agent runs them. Each refusal says
   why and what to do instead, so the agent can fix its own command and carry on.
 - **work**: the `goal` command, which answers "what should I work on next?" from what the repo states in
-  writing, the skills that claim an item, build it and land it, and hooks around merging. See [The work plugin](#the-work-plugin).
+  writing, the skills that claim an item, build it and land it, hooks around merging, and a hook that
+  offers to share what Claude saves to memory. See [The work plugin](#the-work-plugin).
 
 The guards were written for several agents working in one repository at once, each in its own git worktree.
 They suit a single agent too. Note that a plain clone is its own main checkout, so the main-checkout guards
@@ -190,15 +191,16 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 
 ### The skills
 
-| Skill          | Does                                                                                                                          |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `orient`       | What changed on main, `goal --list`, who else is working, open pull requests, one recommendation. Reads only                  |
-| `next`         | Takes `goal`'s item and does it, start to merged, through `work-start` and `work-finish`                                      |
-| `work-start`   | Proves the item is still open, claims it, makes the worktree and branch, posts the standup step, says what done means         |
-| `work-finish`  | Removes the entry in the work's pull request, files follow-ups, runs the gates; after merge, cleans up                        |
-| `branch-prune` | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default                    |
-| `long-loops`   | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                       |
-| `pr`           | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed |
+| Skill           | Does                                                                                                                                         |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `orient`        | What changed on main, `goal --list`, who else is working, open pull requests, one recommendation. Reads only                                 |
+| `next`          | Takes `goal`'s item and does it, start to merged, through `work-start` and `work-finish`                                                     |
+| `work-start`    | Proves the item is still open, claims it, makes the worktree and branch, posts the standup step, says what done means                        |
+| `work-finish`   | Removes the entry in the work's pull request, files follow-ups, runs the gates; after merge, cleans up                                       |
+| `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default                                   |
+| `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                      |
+| `pr`            | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed                |
+| `add-knowledge` | Moves a memory Claude saved into the file every session reads (a repo's CLAUDE.md or the team's rules) by pull request, or marks it personal |
 
 The `pr` skill's checklist leaves out an item turned off for the repo in the guards' overrides file, by the item's
 id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat-model`). The skills post their progress with [standup](https://github.com/kilotronic/standup-board) when it is installed.
@@ -217,6 +219,13 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
   skill's step 5: one starting with the agent line, `🤖 **Agent update**` (any agent comment counts, even a status update or a review of an older commit). With
   none, or when GitHub can't be asked within a few seconds, it warns the agent; it does not stop the merge
   (`BLOCKING` in the hook turns that on).
+- **Memories are offered to the team** (`memories.py`). After Claude writes a memory
+  (`~/.claude/projects/<folder>/memory/<name>.md`) that is not `type: user` and not decided, Claude ends its reply
+  with a one-line offer to share it (`/add-knowledge`). At most once a day (20 hours apart), the first session to start lists memories
+  still waiting, and those whose sharing pull request may have merged. `shared: keep` in a memory's frontmatter
+  marks it personal; `shared: <pull request URL>` records that it was sent. Set `$WORK_MEMORY_MATCH` (a regular
+  expression, case ignored, for example your team's repo names) to offer only memories whose folder name or text
+  matches; unset, every project memory is offered.
 
 ## Development
 

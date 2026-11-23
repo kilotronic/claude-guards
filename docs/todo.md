@@ -25,6 +25,9 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 
 ## Next
 
+- **The daily memory list can be used up by a session nobody reads.** A scripted `claude -p` run or a scheduled
+  agent starts a session too, so it can take the day's list for about 20 hours. Shape: skip the list when the
+  session isn't interactive, if the hook's input can tell.
 - **The merge review check counts any agent comment, of any commit.** A review of an older commit, or a plain
   status update starting with the agent line, satisfies it, so a push after the review merges with no warning.
   Commits after the review are allowed when they only fix its findings, so requiring the head commit would
