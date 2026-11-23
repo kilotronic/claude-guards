@@ -197,6 +197,7 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 | `work-start`   | Proves the item is still open, claims it, makes the worktree and branch, posts the standup step, says what done means |
 | `work-finish`  | Removes the entry in the work's pull request, files follow-ups, runs the gates; after merge, cleans up                |
 | `branch-prune` | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default            |
+| `long-loops`   | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id               |
 
 The skills post their progress with [standup](https://github.com/kilotronic/standup-board) when it is installed.
 
