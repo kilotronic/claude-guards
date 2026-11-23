@@ -209,6 +209,11 @@ The skills post their progress with [standup](https://github.com/kilotronic/stan
   can't see whether the person said yes, so a repo that wants to be asked first says so in its written rules,
   and the agent asks. In other permission modes it says nothing, and the usual prompt asks the person. The
   guards plugin's `no-admin-merge` refuses `--admin` on its own.
+- **Merges are checked for a fresh review** (`review-check.py`). Before `gh pr merge`, with or without
+  `--auto`, it reads the pull request's comments once and looks for the reviewer's comment from the `pr`
+  skill's step 5: one starting with the agent line, `🤖 **Agent update**` (any agent comment counts, even a status update or a review of an older commit). With
+  none, or when GitHub can't be asked within a few seconds, it warns the agent; it does not stop the merge
+  (`BLOCKING` in the hook turns that on).
 
 ## Development
 
