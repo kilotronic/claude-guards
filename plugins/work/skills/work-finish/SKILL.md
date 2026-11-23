@@ -18,7 +18,7 @@ description:
   with no claim mark.
 - **Run the repo's gates**: its formatters, linters and tests (its CLAUDE.md or Makefile), and the review its
   rules require. Fix the findings before merge.
-- Open the pull request (ready, not draft). Arm auto-merge only once its head is your pushed commit
+- Open the pull request (ready, not draft); the `pr` skill does it, with its fresh review. Arm auto-merge only once its head is your pushed commit
   (`gh pr view --json headRefOid -q .headRefOid` equals `git rev-parse HEAD`), after `standup list`.
 
 ## 2. After merge
