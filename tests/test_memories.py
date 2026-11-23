@@ -42,7 +42,9 @@ def memory(
 @pytest.fixture(autouse=True)
 def no_match(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("WORK_MEMORY_MATCH", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))  # never the real lists folder
+    # Never the real lists folder: Path.home() reads HOME, and USERPROFILE on Windows.
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
 
 
 def plugin_list(tmp_path: Path, name: str, text: str) -> Path:
@@ -114,12 +116,32 @@ def test_the_setting_wins_over_plugin_lists(
     assert not memories.offerable(memory(folder, "b", "ACME's deploy"), projects)
 
 
-def test_an_empty_or_broken_plugin_list(projects: Path, tmp_path: Path) -> None:
-    folder = projects / "-Users-x-Code-gh" / "memory"
-    p = memory(folder, "a", "anything")
+def test_an_empty_list_offers_every_memory(projects: Path, tmp_path: Path) -> None:
     plugin_list(tmp_path, "empty", "# nothing yet\n")
+    p = memory(projects / "-Users-x-Code-gh" / "memory", "a", "anything")
     assert memories.offerable(p, projects)
+
+
+def test_a_broken_line_is_skipped_and_the_rest_still_count(
+    projects: Path, tmp_path: Path
+) -> None:
+    # Each line on its own, as the setting would be: `(?i)` is refused inside a group joined with others.
+    plugin_list(tmp_path, "acme", "(unclosed\n(?i)acme\n")
+    plugin_list(tmp_path, "other", "widget\n")
+    folder = projects / "-Users-x-Code-gh" / "memory"
+    assert memories.offerable(memory(folder, "a", "ACME's deploy"), projects)
+    assert memories.offerable(memory(folder, "b", "the widget rule"), projects)
+    assert not memories.offerable(memory(folder, "c", "game night"), projects)
+
+
+def test_lists_with_only_broken_or_unreadable_lines_offer_nothing(
+    projects: Path, tmp_path: Path
+) -> None:
+    p = memory(projects / "-Users-x-Code-gh" / "memory", "a", "anything")
     plugin_list(tmp_path, "broken", "(unclosed\n")
+    assert not memories.offerable(p, projects)
+    path = plugin_list(tmp_path, "broken", "")
+    path.write_bytes(b"\xff\xfe acme\n")
     assert not memories.offerable(p, projects)
 
 

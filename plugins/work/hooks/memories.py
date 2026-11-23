@@ -15,7 +15,8 @@ frontmatter records the decision: `keep` (personal, never offered again) or the 
 shared it. `$WORK_MEMORY_MATCH`, a regular expression (case ignored), limits both hooks to memories whose folder
 name or text matches it, for example a team's repo names. Unset, the lists other plugins write in
 `~/.config/claude-guards/memory-match/` (one file per plugin, a pattern per line, `#` for comments) are used
-together; with neither, every project memory counts. A pattern that doesn't compile turns the hooks off.
+together; with neither, every project memory counts. A setting that doesn't compile turns the hooks off; a
+plugin's line that doesn't compile is skipped, and when none compiles the hooks are off.
 Standard library only.
 """
 
@@ -80,35 +81,55 @@ def is_memory(path: Path, projects: Path) -> bool:
     )
 
 
-def plugin_lists() -> str:
-    """The patterns other plugins supplied, joined into one; empty when there are none."""
+def plugin_lists() -> list[str]:
+    """The patterns other plugins supplied, a line each; an unreadable file counts as one broken pattern."""
     folder = Path.home() / ".config" / "claude-guards" / "memory-match"
     patterns = []
     for path in sorted(folder.glob("*")):
         if path.name.startswith(".") or not path.is_file():
             continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line and not line.startswith("#"):
-                patterns.append(f"(?:{line})")
-    return "|".join(patterns)
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, ValueError):
+            patterns.append("(")
+            continue
+        patterns += [
+            line.strip()
+            for line in lines
+            if line.strip() and not line.strip().startswith("#")
+        ]
+    return patterns
+
+
+def wanted() -> list[re.Pattern] | None:
+    """The patterns in force: None for every memory, an empty list for none.
+
+    The setting wins; a broken setting means none. Each plugin line is compiled on its own and a broken one is
+    skipped, so one plugin's mistake doesn't turn off the others; when every line is broken, none.
+    """
+    setting = os.environ.get("WORK_MEMORY_MATCH")
+    patterns = [setting] if setting else plugin_lists()
+    if not patterns:
+        return None
+    compiled = []
+    for pattern in patterns:
+        try:
+            compiled.append(re.compile(pattern, re.IGNORECASE))
+        except re.error:
+            pass
+    return compiled
 
 
 def matches(path: Path) -> bool:
-    """Whether the memory is in scope: no setting and no list means every memory; a broken one means none."""
+    """Whether the memory is in scope: its folder name or its text matches one pattern in force."""
     try:
-        pattern = os.environ.get("WORK_MEMORY_MATCH") or plugin_lists()
-    except OSError:
-        return False
-    if not pattern:
-        return True
-    try:
-        wanted = re.compile(pattern, re.IGNORECASE)
+        patterns = wanted()
+        if patterns is None:
+            return True
         folder = path.parent.parent.name
-        return bool(
-            wanted.search(folder) or wanted.search(path.read_text(encoding="utf-8"))
-        )
-    except (re.error, OSError):
+        text = path.read_text(encoding="utf-8") if patterns else ""
+        return any(p.search(folder) or p.search(text) for p in patterns)
+    except (OSError, ValueError):
         return False
 
 

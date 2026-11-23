@@ -254,9 +254,12 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
   expression, case ignored, for example your team's repo names) to offer only memories whose folder name or text
   matches. A team's own plugin can set this for everyone who installs it instead: its start-up hook copies a file
   of patterns (one per line, `#` for comments) into `~/.config/claude-guards/memory-match/`, named after the
-  plugin, and the hook uses every file there together, unless `$WORK_MEMORY_MATCH` is set. With neither, every
-  project memory is offered. A pattern that doesn't compile turns the offers off. Hooks of different plugins run
-  at the same time, so the first session after installing may list memories before the file is there.
+  plugin, and the hook uses every file there together, unless `$WORK_MEMORY_MATCH` is set to a pattern. With
+  neither, every project memory is offered. A setting that doesn't compile turns the offers off; a line in a
+  plugin's file that doesn't compile is skipped, and when no line compiles the offers are off. Hooks of different
+  plugins run at the same time, so the first session after installing may list memories before the file is there.
+  Nothing removes the file when the plugin is uninstalled; delete it by hand. The plugin's `hooks/hooks.json` adds
+  this under `SessionStart`:
 
   ```json
   {

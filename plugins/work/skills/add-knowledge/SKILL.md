@@ -18,7 +18,7 @@ Arguments are all optional:
   team?", or the daily list's "Memories waiting to be shared". Several: do each in turn, one pull request per
   repo (several memories for the same file go in one pull request). Nothing was offered in this conversation:
   take the first 9 the daily check would list (undecided memories that match `$WORK_MEMORY_MATCH` when it is
-  set, not `type: user`, sorted by folder and name), show their names with one line each on what they say, and
+  set, else the lists in `~/.config/claude-guards/memory-match/` when there are any, not `type: user`, sorted by folder and name), show their names with one line each on what they say, and
   do them, skipping ones that are clearly personal (offer `keep` for those in your report). Say how many are
   left for the next run.
 - **`keep`:** mark what was offered (as above) personal.
