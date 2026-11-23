@@ -24,7 +24,8 @@ git branch -r --list '*<a word from the title>*'                                
 goal merged <a related branch>                                                    # exit 0: on main already
 ```
 
-If the fix already landed, don't claim: delete the entry in a small docs pull request, citing the fix, and go
+If the fix already landed, don't claim: delete the entry (a plan row: its file) in a small docs pull request,
+citing the fix, and go
 back to `goal`. That is a complete, reportable outcome.
 
 ## 2. Worktree and branch

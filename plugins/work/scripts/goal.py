@@ -7,7 +7,9 @@ It reads, from the working copy (so goals edited locally count right away):
 - the README's `## How work runs here` section: the milestone or goals file, the todo file and the limit on
   work in progress;
 - the todo file: its Defects and Next sections, top first, and the claim marks on their entries;
-- `.claude/work.toml`, optional: other heading names, entries that need the owner, the merge method.
+- `.claude/work.toml`, optional: other heading names, entries that need the owner, the merge method, and a
+  plan kept as row files (`rows`): one markdown table row per `<n>.md` file, offered as `<rows_name> <n>` with
+  the todo section its Phase maps to (`rows_sections`), once no row it waits on is left.
 
 Claims are the exception: the work's own pull request is the claim. An item is in progress while an open pull
 request into the default branch, found by asking GitHub (`gh repo view`, not the local `origin/HEAD`, which can be
@@ -75,6 +77,11 @@ class Settings:
     merge_method: str = "squash"  # how the pr skill merges; goal only checks it
     branch_prefix: str = "work/"
     named_defects: bool = False  # true when the settings file named the defects heading
+    rows: str = ""  # a folder of row files, `<n>.md`, each one markdown table row under its header
+    rows_name: str = "row"  # a row's item title is `<rows_name> <n>`
+    rows_sections: list[str] = field(
+        default_factory=list
+    )  # `<phase>=<section>`: rows of that Phase come just before that next section's entries
 
 
 _KEYS = {
@@ -83,6 +90,9 @@ _KEYS = {
     "skip": list,
     "merge_method": str,
     "branch_prefix": str,
+    "rows": str,
+    "rows_name": str,
+    "rows_sections": list,
 }
 
 
@@ -147,6 +157,11 @@ def parse_settings(text: str, use_tomllib: bool = True) -> Settings:
         setattr(s, key, value)
     if "defects" in data:
         s.named_defects = True
+    bad = [v for v in s.rows_sections if "=" not in v]
+    if bad:
+        raise ValueError(
+            f"{SETTINGS_PATH}: rows_sections pairs are `<phase>=<section>`, not `{bad[0]}`"
+        )
     if s.merge_method not in ("squash", "rebase", "merge"):
         raise ValueError(f"{SETTINGS_PATH}: merge_method is squash, rebase or merge")
     return s
@@ -236,6 +251,10 @@ class Entry:
     line: int
     text: str
     claim: Claim | None = None
+    path: str = ""  # the file the entry's line is in; the todo file when empty
+    waits: tuple[
+        int, ...
+    ] = ()  # a row's Waits on: rows that must be built (their files gone) first
 
 
 @dataclass
@@ -333,7 +352,7 @@ def mark(text: str, line: int, claim: Claim) -> str:
     """The text with entry `line` (1-based) marked as claimed, at the end of that line."""
     lines = text.splitlines(keepends=True)
     ln = lines[line - 1]
-    if not ln.startswith("- ") or MARK.search(ln):
+    if not ln.startswith(("- ", "|")) or MARK.search(ln):
         raise ValueError(f"line {line} is not an unclaimed entry")
     body = ln.rstrip("\r\n")
     lines[line - 1] = (
@@ -349,6 +368,132 @@ def unmark(text: str, line: int) -> str:
         raise ValueError(f"line {line} is not claimed")
     lines[line - 1] = MARK.sub("", lines[line - 1], count=1)
     return "".join(lines)
+
+
+# --- a plan kept as row files ------------------------------------------------------------------------------
+
+
+def _cells(line: str) -> list[str]:
+    return [c.strip() for c in MARK.sub("", line).strip().strip("|").split("|")]
+
+
+def _waits(cell: str) -> tuple[int, ...]:
+    """The row numbers a Waits on cell names: `—`, or numbers and `a–b` spans, each with an optional `(why)`, then
+    any `; check: ...` parts, which wait on no row."""
+    out: list[int] = []
+    for part in re.sub(r"\([^()]*\)", "", cell.split(";", 1)[0]).split(","):
+        if part.strip().lower().startswith("check:"):
+            break
+        m = re.fullmatch(r"\s*(\d+)(?:\s*[–-]\s*(\d+))?\s*", part)
+        if m:
+            out += range(int(m[1]), int(m[2] or m[1]) + 1)
+    return tuple(out)
+
+
+def parse_rows(files: list[tuple[str, str]], settings: Settings) -> list[Entry]:
+    """Each `<n>.md` file's one table row, as an entry titled `<rows_name> <n>`. ValueError names a file that is
+    not one row numbered as the file is, so a slip drops no row silently."""
+    sections = {
+        k.strip().lower(): v.strip()
+        for k, v in (pair.split("=", 1) for pair in settings.rows_sections)
+    }
+    out: list[Entry] = []
+    for path, text in sorted(
+        files,
+        key=lambda f: (int(Path(f[0]).stem) if Path(f[0]).stem.isdigit() else -1, f[0]),
+    ):
+        stem = Path(path).stem
+        lines = text.splitlines()
+        table = [(i, ln) for i, ln in enumerate(lines) if ln.startswith("|")]
+        if not stem.isdigit() or len(table) != 3:
+            raise ValueError(
+                f"{path}: not one table row under a header in a file named `<n>.md`"
+            )
+        names = [c.lower() for c in _cells(table[0][1])]
+        i, ln = table[2]
+        cells = _cells(ln)
+        if (
+            len(cells) != len(names)
+            or "#" not in names
+            or "step" not in names
+            or cells[names.index("#")] != stem
+        ):
+            raise ValueError(
+                f"{path}: its row is not numbered {stem}, with one cell for each column of a header that has `#`"
+                " and `Step`"
+            )
+
+        by_name = dict(zip(names, cells))
+        m = MARK.search(ln)
+        out.append(
+            Entry(
+                f"{settings.rows_name} {stem}",
+                sections.get(by_name.get("phase", "").lower(), ""),
+                i + 1,
+                # What `skip` reads: every cell but Waits on, whose checks name what is checked, not who works.
+                " | ".join(c for n, c in by_name.items() if n != "waits on"),
+                Claim(m["who"], m["machine"], m["date"]) if m else None,
+                path,
+                _waits(by_name.get("waits on", "")),
+            )
+        )
+    return out
+
+
+def with_rows(todo: Todo, rows: list[Entry], settings: Settings) -> Todo:
+    """The todo with the rows added to its Next list: each row just before its section's entries, moved up to
+    the earliest section of any row that waits on it; a row with no section comes last."""
+    order = {name.lower(): n for n, name in enumerate(settings.next)}
+    last = len(settings.next)
+    rank = {key(r.title): order.get(r.section.lower(), last) for r in rows}
+    by_num = {int(Path(r.path).stem): r for r in rows}
+    changed = True
+    while changed:
+        changed = False
+        for r in rows:
+            for n in r.waits:
+                dep = by_num.get(n)
+                if dep is not None and rank[key(dep.title)] > rank[key(r.title)]:
+                    rank[key(dep.title)] = rank[key(r.title)]
+                    changed = True
+    present = set(by_num)
+    for r in rows:
+        r.waits = tuple(n for n in r.waits if n in present)
+        if rank[key(r.title)] < last:
+            r.section = settings.next[rank[key(r.title)]]
+
+    def place(e: Entry) -> tuple[int, int]:
+        if e.path:
+            return (rank[key(e.title)], 0)
+        return (order.get(e.section.lower(), last), 1)
+
+    nxt = sorted(todo.next + rows, key=place)  # stable: file order within a place
+    return Todo(todo.defects, nxt, todo.missing)
+
+
+def read_todo(path: str, settings: Settings, get, ls, strict: bool = True) -> Todo:
+    """The todo file and the plan's rows, read through `get(path)` and `ls(folder)` (the working copy, or a commit).
+    With `strict`, a bad row file raises ValueError; otherwise it is left out."""
+    todo = parse_todo(get(path) or "", settings)
+    if not settings.rows:
+        return todo
+    files = []
+    for name in ls(settings.rows) or []:
+        if name.endswith(".md"):
+            rel = f"{settings.rows.rstrip('/')}/{name}"
+            files.append((rel, get(rel) or ""))
+    try:
+        rows = parse_rows(files, settings)
+    except ValueError:
+        if strict:
+            raise
+        rows = []
+        for f in files:
+            try:
+                rows += parse_rows([f], settings)
+            except ValueError:
+                continue
+    return with_rows(todo, rows, settings)
 
 
 def key(text: str) -> str:
@@ -411,7 +556,9 @@ def is_stale(claim: Claim, today: dt.date) -> bool:
 
 
 def _free(e: Entry, settings: Settings) -> bool:
-    return e.claim is None and not any(m in e.text for m in settings.skip)
+    return (
+        e.claim is None and not e.waits and not any(m in e.text for m in settings.skip)
+    )
 
 
 def _item(e: Entry, settings: Settings | None = None) -> dict:
@@ -421,6 +568,7 @@ def _item(e: Entry, settings: Settings | None = None) -> dict:
         "title": e.title,
         "section": e.section,
         "line": e.line,
+        **({"path": e.path} if e.path else {}),
         "branch": prefix + slug(e.title),
     }
 
@@ -605,6 +753,34 @@ class Repo:
         except OSError:
             return None
 
+    def ls(self, folder: str, ref: str | None = None) -> list[str] | None:
+        """The file names in a folder as committed, or in the working copy with ref "" (None when it isn't there)."""
+        if ref == "":
+            target = self.root / folder
+            try:
+                if not target.resolve().is_relative_to(self.root.resolve()):
+                    return None
+                return sorted(x.name for x in target.iterdir() if x.is_file())
+            except OSError:
+                return None
+        done = run(
+            ["git", "ls-tree", "--name-only", f"{ref or self.ref}:{folder}"],
+            self.root,
+            check=False,
+        )
+        return done.stdout.splitlines() if done.returncode == 0 else None
+
+    def todo_at(self, path: str, settings: Settings, ref: str | None = None) -> Todo:
+        """The todo and the plan's rows as committed at ref (origin's default branch when None); a bad row file is
+        left out."""
+        return read_todo(
+            path,
+            settings,
+            lambda rel: self.show(rel, ref=ref),
+            lambda folder: self.ls(folder, ref=ref),
+            strict=False,
+        )
+
     def branch_name(self) -> str | None:
         """The checked-out branch, or None on a detached HEAD."""
         done = run(
@@ -679,24 +855,19 @@ def _branch_marks(
     """The marks a branch carries, by title key. An entry its tip no longer has is judged by the latest commit on
     the branch that still had it: work-finish deletes the claimed entry in the work's last commit, and the claim
     holds until the pull request merges."""
-    entries = {
-        key(e.title): e
-        for e in parse_todo(repo.show(path, ref=head) or "", settings).entries
-    }
+    entries = {key(e.title): e for e in repo.todo_at(path, settings, ref=head).entries}
     out = {k: e.claim for k, e in entries.items() if e.claim}
     gone = keys - set(entries)
     if not gone:
         return out
     revs = run(
-        ["git", "rev-list", "--max-count=20", f"{repo.ref}..{head}", "--", path],
+        ["git", "rev-list", "--max-count=20", f"{repo.ref}..{head}", "--", path]
+        + ([settings.rows] if settings.rows else []),
         repo.root,
         check=False,
     ).stdout.split()
     for rev in revs:
-        older = {
-            key(e.title): e
-            for e in parse_todo(repo.show(path, ref=rev) or "", settings).entries
-        }
+        older = {key(e.title): e for e in repo.todo_at(path, settings, ref=rev).entries}
         for k in gone & set(older):
             claim = older[k].claim
             if claim:
@@ -719,7 +890,7 @@ def _fork_marks(
         return None
     return {
         key(e.title): e.claim
-        for e in parse_todo(repo.show(path, ref=base) or "", settings).entries
+        for e in repo.todo_at(path, settings, ref=base).entries
         if e.claim
     }
 
@@ -759,9 +930,7 @@ def _live_claims(
         )
         return None
     on_base = {
-        key(e.title): e.claim
-        for e in parse_todo(repo.show(path) or "", settings).entries
-        if e.claim
+        key(e.title): e.claim for e in repo.todo_at(path, settings).entries if e.claim
     }
     # A mark on the default branch, made before claims moved to pull requests, still holds, and holds first.
     holders: dict[str, list[Claim]] = {
@@ -863,7 +1032,16 @@ def load(
     todo_text = repo.read(path) if path else None
     if path and todo_text is None:
         missing.append(f"{path} is not in the working copy")
-    todo = parse_todo(todo_text or "", settings)
+    try:
+        todo = read_todo(
+            path or "",
+            settings,
+            lambda rel: todo_text if rel == path else repo.read(rel),
+            lambda folder: repo.ls(folder, ref=""),
+        )
+    except ValueError as e:
+        missing.append(str(e))
+        todo = parse_todo(todo_text or "", settings)
     if todo_text is not None:
         missing += [f"{path} has no {m}" for m in todo.missing]
         for e in todo.entries:
@@ -1032,7 +1210,7 @@ def render(out: dict) -> str:
     if n["item"]:
         i = n["item"]
         lines.append(
-            f'next: {_VERB[n["kind"]]} "{i["title"]}" ({out["todo"]} line {i["line"]}): {n["reason"]}'
+            f'next: {_VERB[n["kind"]]} "{i["title"]}" ({i.get("path") or out["todo"]} line {i["line"]}): {n["reason"]}'
         )
     else:
         lines.append(f"next: {n['reason']}")
@@ -1061,7 +1239,8 @@ def render(out: dict) -> str:
         lines.append("")
         lines.append("free, in order:")
         lines += [
-            f"  {i['section']}: {i['title']} (line {i['line']})" for i in out["free"]
+            f"  {i['section']}: {i['title']} ({i['path'] + ' ' if i.get('path') else ''}line {i['line']})"
+            for i in out["free"]
         ] or ["  none"]
         if ip["claims"]:
             lines.append("claimed:")
@@ -1071,6 +1250,16 @@ def render(out: dict) -> str:
                 for c in ip["claims"]
             ]
     return "\n".join(lines)
+
+
+def _file(state: State, entry: Entry) -> tuple[str, str]:
+    """The path and working-copy text of the file the entry's line is in."""
+    if not entry.path:
+        return state.todo_path, state.todo_text
+    text = state.repo.read(entry.path)
+    if text is None:
+        raise RuntimeError(f"{entry.path} is not in the working copy")
+    return entry.path, text
 
 
 def find(todo: Todo, name: str) -> Entry:
@@ -1184,21 +1373,28 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
             f'"{entry.title}" is held by {held.holder()}: pick another item (if this branch\'s pull request also'
             " marks it, close that pull request)"
         )
+    if entry.waits:
+        raise Refused(
+            f'"{entry.title}" waits on '
+            + ", ".join(f"{state.settings.rows_name} {n}" for n in entry.waits)
+            + ", still in the plan: pick another item"
+        )
     owner = [m for m in state.settings.skip if m in entry.text]
     if owner:
         raise Refused(
             f'"{entry.title}" is marked {owner[0]}: it needs the owner or planned work first. Pick another item'
         )
-    line = state.todo_text.splitlines(keepends=True)[entry.line - 1]
+    fpath, ftext = _file(state, entry)
+    line = ftext.splitlines(keepends=True)[entry.line - 1]
     current = MARK.search(line)
     if current and (current["who"], current["machine"]) == (me.who, me.machine):
         if run(
-            ["git", "diff", "--quiet", "HEAD", "--", state.todo_path],
+            ["git", "diff", "--quiet", "HEAD", "--", fpath],
             repo.root,
             check=False,
         ).returncode:
             raise RuntimeError(
-                f"{state.todo_path} has uncommitted changes: commit or drop them first"
+                f"{fpath} has uncommitted changes: commit or drop them first"
             )
         return OK, {
             "status": "ok",
@@ -1207,7 +1403,7 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
             " request, which is the claim",
             "warnings": repo.warnings,
         }
-    text = state.todo_text
+    text = ftext
     if (
         current
     ):  # a mark nothing counts: on no open pull request, and not on the default branch
@@ -1215,7 +1411,7 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
     mine = Claim(me.who, me.machine, today.isoformat())
     _commit(
         repo,
-        state.todo_path,
+        fpath,
         mark(text, entry.line, mine),
         f"chore: claim {entry.title}",
         f"Marks the todo entry as taken by {mine.who} on {mine.machine}. While the work's pull request is open, it"
@@ -1242,7 +1438,8 @@ def release(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
     me = me_from_env(args.as_)
     if not me.named and not args.holder:
         raise Unclear(NO_NAME)
-    current = MARK.search(state.todo_text.splitlines(keepends=True)[entry.line - 1])
+    fpath, ftext = _file(state, entry)
+    current = MARK.search(ftext.splitlines(keepends=True)[entry.line - 1])
     if current is None:
         raise RuntimeError(f'"{entry.title}" is not marked on {branch}')
     holder = args.holder or me.who
@@ -1253,8 +1450,8 @@ def release(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
         )
     _commit(
         repo,
-        state.todo_path,
-        unmark(state.todo_text, entry.line),
+        fpath,
+        unmark(ftext, entry.line),
         f"chore: release the claim on {entry.title}",
         f"Removes {current['who']}'s claim mark, so the item is free again once this is pushed.",
     )
