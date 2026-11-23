@@ -218,3 +218,69 @@ def test_a_section_pair_needs_an_equals_sign(tmp_path: Path) -> None:
     rc, out = p.json()
     assert rc == 2
     assert "rows_sections" in json.dumps(out)
+
+
+def test_rows_come_in_number_order_not_text_order(tmp_path: Path) -> None:
+    p = rows_project(
+        tmp_path,
+        {n: row(n, f"Step {n}", "soon") for n in (1, 2, 10)},
+    )
+    _, out = p.json("--list")
+    assert [t for t in free(out) if t.startswith("plan row")] == [
+        "plan row 1",
+        "plan row 2",
+        "plan row 10",
+    ]
+
+
+def test_a_short_row_is_named_not_a_crash(tmp_path: Path) -> None:
+    p = rows_project(tmp_path, {3: HEADER + "| 3 | Wire the bell |\n"})
+    rc, out = p.json()
+    assert rc == 2
+    assert "docs/plan/3.md" in json.dumps(out)
+
+
+def test_a_short_row_on_a_pull_request_branch_is_left_out(tmp_path: Path) -> None:
+    p = rows_project(tmp_path, {3: row(3, "Wire the bell", "soon")})
+    name = "work/agent-b-7"
+    git(p.clone, "checkout", "-q", "-B", name, "origin/main")
+    (p.clone / "docs/plan/3.md").write_text(HEADER + "| 3 |\n")
+    git(p.clone, *IDENTITY, "commit", "-q", "-am", "chore: break it")
+    git(p.clone, "push", "-q", "origin", f"HEAD:refs/heads/{name}")
+    tip = git(p.clone, "rev-parse", "HEAD").strip()
+    git(p.clone, "checkout", "-q", "--detach", "origin/main")
+    p.prs(
+        "open",
+        [
+            {
+                "number": 7,
+                "headRefName": name,
+                "headRefOid": tip,
+                "isCrossRepository": False,
+                "author": {"login": "b"},
+                "updatedAt": "2026-11-21T12:00:00Z",
+            }
+        ],
+    )
+    rc, out = p.json("--list")
+    assert rc == 0, out
+    assert "plan row 3" in free(out)
+
+
+def test_claiming_a_row_that_waits_on_another_is_refused(tmp_path: Path) -> None:
+    p = rows_project(
+        tmp_path,
+        {3: row(3, "Wire the bell", "soon"), 5: row(5, "Ring it", "soon", waits="3")},
+    )
+    git(p.clone, "checkout", "-q", "-b", "work/plan-row-5", "origin/main")
+    rc, out = p.json("claim", "plan row 5")
+    assert rc == 3
+    assert "plan row 3" in out["message"]
+
+
+def test_waits_on_reads_only_row_numbers_before_a_check() -> None:
+    import goal
+
+    assert goal._waits("3, check: run 12") == (3,)
+    assert goal._waits("7–9 (needs the bell), 12") == (7, 8, 9, 12)
+    assert goal._waits("—") == ()

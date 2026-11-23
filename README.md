@@ -156,13 +156,14 @@ rows_name = "plan row"                # a row's item title is "<rows_name> <n>"
 rows_sections = ["ios=Next"]          # rows of Phase ios come just before Next's entries
 ```
 
-**A plan kept as row files.** With `rows`, each `<n>.md` in that folder holds one markdown table row under its
-header, with `#` and `Step` columns (and optionally `Home`, `Phase` and `Waits on`). `goal` offers each row as an
+**A plan kept as row files.** With `rows`, the folder holds only row files: each `<n>.md` holds one markdown
+table row under its header, with `#` and `Step` columns (and optionally `Home`, `Phase` and `Waits on`). `goal` offers each row as an
 item titled `<rows_name> <n>`, placed by its Phase through `rows_sections` (no match: after every section). A row
-whose `Waits on` names a row still in the folder (`3`, `7–9`, `3 (why)`; `check: …` parts name none) isn't
-free, and a row it waits on moves up to its section. A row containing a `skip` text needs the owner. A row is
+whose `Waits on` names a row still in the folder (comma-separated `3`, `7–9` or `3 (why)`, before any `check: …`
+part) isn't free, and `goal claim` refuses it, and a row it waits on moves up to its section. A row containing a `skip` text needs the owner. A row is
 claimed by a mark at the end of its table line, the same way as an entry, and built by deleting its file. A file
-that isn't one row numbered as its name is named as unclear.
+that isn't one row numbered as its name, with a cell for each header column, is named as unclear (on an open
+pull request's branch it is left out). Rows come in number order.
 
 ### The work's pull request is the claim
 

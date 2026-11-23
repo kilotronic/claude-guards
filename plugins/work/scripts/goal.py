@@ -380,13 +380,13 @@ def _cells(line: str) -> list[str]:
 def _waits(cell: str) -> tuple[int, ...]:
     """The row numbers a Waits on cell names: `—`, or numbers and `a–b` spans, each with an optional `(why)`, then
     any `; check: ...` parts, which wait on no row."""
-    head = cell.split(";", 1)[0]
-    if head.strip().lower().startswith("check:"):
-        return ()
-    head = re.sub(r"\([^()]*\)", "", head)
     out: list[int] = []
-    for lo, hi in re.findall(r"(\d+)(?:\s*[–-]\s*(\d+))?", head):
-        out += range(int(lo), int(hi or lo) + 1)
+    for part in re.sub(r"\([^()]*\)", "", cell.split(";", 1)[0]).split(","):
+        if part.strip().lower().startswith("check:"):
+            break
+        m = re.fullmatch(r"\s*(\d+)(?:\s*[–-]\s*(\d+))?\s*", part)
+        if m:
+            out += range(int(m[1]), int(m[2] or m[1]) + 1)
     return tuple(out)
 
 
@@ -398,7 +398,10 @@ def parse_rows(files: list[tuple[str, str]], settings: Settings) -> list[Entry]:
         for k, v in (pair.split("=", 1) for pair in settings.rows_sections)
     }
     out: list[Entry] = []
-    for path, text in sorted(files):
+    for path, text in sorted(
+        files,
+        key=lambda f: (int(Path(f[0]).stem) if Path(f[0]).stem.isdigit() else -1, f[0]),
+    ):
         stem = Path(path).stem
         lines = text.splitlines()
         table = [(i, ln) for i, ln in enumerate(lines) if ln.startswith("|")]
@@ -409,9 +412,15 @@ def parse_rows(files: list[tuple[str, str]], settings: Settings) -> list[Entry]:
         names = [c.lower() for c in _cells(table[0][1])]
         i, ln = table[2]
         cells = _cells(ln)
-        if "#" not in names or "step" not in names or cells[names.index("#")] != stem:
+        if (
+            len(cells) != len(names)
+            or "#" not in names
+            or "step" not in names
+            or cells[names.index("#")] != stem
+        ):
             raise ValueError(
-                f"{path}: its row is not numbered {stem} under a `#` and `Step` header"
+                f"{path}: its row is not numbered {stem}, with one cell for each column of a header that has `#`"
+                " and `Step`"
             )
 
         by_name = dict(zip(names, cells))
@@ -759,7 +768,7 @@ class Repo:
             self.root,
             check=False,
         )
-        return done.stdout.split() if done.returncode == 0 else None
+        return done.stdout.splitlines() if done.returncode == 0 else None
 
     def todo_at(self, path: str, settings: Settings, ref: str | None = None) -> Todo:
         """The todo and the plan's rows as committed at ref (origin's default branch when None); a bad row file is
@@ -1363,6 +1372,12 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
         raise Refused(
             f'"{entry.title}" is held by {held.holder()}: pick another item (if this branch\'s pull request also'
             " marks it, close that pull request)"
+        )
+    if entry.waits:
+        raise Refused(
+            f'"{entry.title}" waits on '
+            + ", ".join(f"{state.settings.rows_name} {n}" for n in entry.waits)
+            + ", still in the plan: pick another item"
         )
     owner = [m for m in state.settings.skip if m in entry.text]
     if owner:
