@@ -1,0 +1,36 @@
+name: tag-releases
+
+# Tag each plugin version as it lands on main, as `<plugin>--v<version>` at the commit that set it.
+# Claude Code resolves a dependency's version constraint against these tags, so a version with no tag
+# leaves every plugin that needs it turned off. See .github/scripts/missing_tags.py.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: tag-releases
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the tags
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the whole history and its tags, to find where each version landed
+          persist-credentials: false
+      - name: Tag versions that have no tag yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 .github/scripts/missing_tags.py | while read -r tag sha; do
+            echo "tagging $tag at $sha"
+            gh api "repos/$REPO/git/refs" -f "ref=refs/tags/$tag" -f "sha=$sha" --silent
+          done
