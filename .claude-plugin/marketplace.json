@@ -1,12 +1,12 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "claude-guards",
-  "description": "Claude Code plugins: hooks that stop risky git, GitHub and shell commands, and the goal command for what to work on next",
+  "description": "Claude Code plugins: hooks that stop risky git, GitHub and shell commands, and the goal command, skills and hooks for working through a repo's todo list and landing pull requests",
   "owner": {
     "name": "Kilotronic"
   },
   "metadata": {
-    "version": "1.2.2"
+    "version": "1.3.0"
   },
   "plugins": [
     {
@@ -16,7 +16,7 @@
     },
     {
       "name": "work",
-      "description": "The goal command and the skills around it: what to work on next, claiming it in the todo file, and landing it; hooks let an agent run a plain gh pr merge in auto mode, warn at a merge with no fresh review, and offer to share what Claude saves to memory",
+      "description": "The goal command and the skills around it: what to work on next, claiming it, opening the pull request with a fresh review and landing it; long-loops and add-knowledge; hooks that let an agent run a plain gh pr merge in auto mode, warn at a merge with no fresh review, and offer to share what Claude saves to memory",
       "source": "./plugins/work"
     }
   ]

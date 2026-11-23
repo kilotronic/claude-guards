@@ -1,11 +1,19 @@
 {
   "name": "work",
-  "version": "1.0.1",
-  "description": "The goal command and the skills around it: what to work on next, claiming it in the todo file, and landing it; hooks let an agent run a plain gh pr merge in auto mode, warn at a merge with no fresh review, and offer to share what Claude saves to memory",
+  "version": "1.1.0",
+  "description": "The goal command and the skills around it: what to work on next, claiming it, opening the pull request with a fresh review and landing it; long-loops and add-knowledge; hooks that let an agent run a plain gh pr merge in auto mode, warn at a merge with no fresh review, and offer to share what Claude saves to memory",
   "author": {
     "name": "Kilotronic"
   },
   "license": "MIT",
   "repository": "https://github.com/kilotronic/claude-guards",
-  "keywords": ["workflow", "todo", "claims", "work-in-progress"]
+  "keywords": [
+    "workflow",
+    "todo",
+    "claims",
+    "work-in-progress",
+    "pull-requests",
+    "review",
+    "memory"
+  ]
 }
