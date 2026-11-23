@@ -1,113 +1,155 @@
 # SPDX-License-Identifier: MIT
 
-"""`goal claim` and `goal release`: a tiny pull request that marks or unmarks one todo line, with git as the lock."""
+"""`goal claim` and `goal release`: a commit on the work's own branch that marks or unmarks one todo line. The
+work's pull request, once open, carries the mark, and that is the claim."""
 
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
-from workrun import IDENTITY, TODO, claimed, git, make_project
+from workrun import README, TODO, Project, claimed, git, make_project
 
 
-def test_a_claim_pushes_a_branch_marking_only_the_entry_line(tmp_path: Path) -> None:
+def work_tree(p: Project, tmp: Path, branch: str = "work/snooze") -> Path:
+    """A worktree on a new work branch off origin/main, as work-start makes it."""
+    wt = tmp / "wt"
+    git(p.clone, "worktree", "add", "-q", "-b", branch, str(wt), "origin/main")
+    return wt
+
+
+def test_a_claim_commits_the_mark_on_the_work_branch(tmp_path: Path) -> None:
     p = make_project(tmp_path)
-    rc, out, err = p.run("claim", "Add a snooze button")
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
     assert rc == 0, err
-    marked = p.origin_file("docs/todo.md", "claim/add-a-snooze-button")
-    assert marked == claimed(TODO, "Add a snooze button", "agent-a", "2026-11-22")
-    # main is untouched until the pull request merges.
-    assert p.origin_file("docs/todo.md") == TODO
-    assert "https://github.com/example/widgets/pull/7" in out
+    want = claimed(TODO, "Add a snooze button", "agent-a", "2026-11-22")
+    assert (wt / "docs" / "todo.md").read_text() == want
+    assert git(wt, "show", "HEAD:docs/todo.md") == want
+    assert git(wt, "log", "-1", "--format=%s").strip() == (
+        "chore: claim Add a snooze button"
+    )
+    assert git(wt, "diff", "--name-only", "origin/main", "HEAD").split() == [
+        "docs/todo.md"
+    ]
+    assert "open" in out and "pull request" in out
 
 
-def test_the_claim_commit_touches_only_the_todo_file(tmp_path: Path) -> None:
-    p = make_project(tmp_path)
-    p.run("claim", "Add a snooze button")
-    changed = git(
-        p.origin, "diff", "--name-only", "main", "claim/add-a-snooze-button"
-    ).split()
-    assert changed == ["docs/todo.md"]
-    subject = git(
-        p.origin, "log", "-1", "--format=%s", "claim/add-a-snooze-button"
-    ).strip()
-    assert subject == "chore: claim Add a snooze button"
-
-
-def test_a_claim_opens_a_pull_request_and_arms_auto_merge(tmp_path: Path) -> None:
-    p = make_project(tmp_path)
-    p.run("claim", "Add a snooze button")
-    calls = p.gh_calls()
-    create = next(c for c in calls if c[:2] == ["pr", "create"])
-    assert create[create.index("--head") + 1] == "claim/add-a-snooze-button"
-    assert create[create.index("--base") + 1] == "main"
-    merge = next(c for c in calls if c[:2] == ["pr", "merge"])
-    assert "--auto" in merge and "--squash" in merge
-    assert "--admin" not in merge
-
-
-def test_no_merge_leaves_the_pull_request_unarmed(tmp_path: Path) -> None:
-    p = make_project(tmp_path)
-    p.run("claim", "Add a snooze button", "--no-merge")
-    assert not any(c[:2] == ["pr", "merge"] for c in p.gh_calls())
-
-
-def test_the_merge_method_comes_from_the_settings(tmp_path: Path) -> None:
-    p = make_project(tmp_path, extra={".claude/work.toml": 'merge_method = "rebase"\n'})
-    p.run("claim", "Add a snooze button")
-    merge = next(c for c in p.gh_calls() if c[:2] == ["pr", "merge"])
-    assert "--rebase" in merge
-
-
-def test_claiming_an_item_already_claimed_on_main_fails_naming_the_holder(
+def test_a_claim_opens_no_pull_request_of_its_own_and_pushes_nothing(
     tmp_path: Path,
 ) -> None:
-    p = make_project(
-        tmp_path, todo=claimed(TODO, "Add a snooze button", "agent-b", "2026-11-21")
-    )
+    p = make_project(tmp_path)
+    wt = work_tree(p, tmp_path)
+    assert p.run("claim", "Add a snooze button", cwd=wt)[0] == 0
+    assert not any(c[:2] in (["pr", "create"], ["pr", "merge"]) for c in p.gh_calls())
+    assert "work/snooze" not in git(p.origin, "branch", "--list")
+
+
+def test_a_claim_on_the_default_branch_is_refused(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    git(p.clone, "checkout", "-q", "-B", "main", "origin/main")
     rc, out, err = p.run("claim", "Add a snooze button")
-    assert rc == 3
-    assert "agent-b" in out + err
-    assert not any(c[:2] == ["pr", "create"] for c in p.gh_calls())
+    assert rc == 1
+    assert "work's own branch" in out + err
+    assert git(p.clone, "status", "--porcelain") == ""
 
 
-def test_a_second_claim_while_the_first_is_open_fails(tmp_path: Path) -> None:
+def test_a_claim_on_a_detached_head_is_refused(tmp_path: Path) -> None:
     p = make_project(tmp_path)
-    assert p.run("claim", "Add a snooze button")[0] == 0
-    rc, out, err = p.run("claim", "Add a snooze button", who="agent-b")
-    assert rc == 3
-    assert "claim/add-a-snooze-button" in out + err
+    rc, out, err = p.run("claim", "Add a snooze button")
+    assert rc == 1
+    assert "work's own branch" in out + err
 
 
-def test_two_claims_on_one_line_conflict_so_the_later_cannot_merge(
+def test_an_item_an_open_pull_request_holds_is_refused_naming_it(
     tmp_path: Path,
 ) -> None:
-    """Git is the lock: both claims edit the same line, so once one merges the other conflicts."""
     p = make_project(tmp_path)
-    work = tmp_path / "w"
-    git(p.clone, "worktree", "add", "-q", "--detach", str(work), "origin/main")
-    for who in ("agent-a", "agent-b"):
-        text = claimed(TODO, "Add a snooze button", who, "2026-11-22")
-        git(work, "checkout", "-q", "-B", who, "origin/main")
-        (work / "docs" / "todo.md").write_text(text)
-        git(work, *IDENTITY, "commit", "-q", "-am", f"chore: claim as {who}")
-    git(work, "checkout", "-q", "-B", "merged", "agent-a")
-    done = subprocess.run(
-        ["git", "-C", str(work), *IDENTITY, "merge", "agent-b"],
-        capture_output=True,
-        text=True,
-        check=False,
+    p.open_claim("Add a snooze button", "agent-b", 7)
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
+    assert rc == 3
+    assert "agent-b" in out + err and "#7" in out + err
+    assert git(wt, "log", "-1", "--format=%s", "HEAD").strip() == "chore: start"
+
+
+def test_your_own_open_pull_request_is_already_yours(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    p.open_claim("Add a snooze button", "agent-a", 7)
+    wt = work_tree(p, tmp_path)
+    rc, out, _ = p.run("claim", "Add a snooze button", cwd=wt)
+    assert rc == 0
+    assert "already yours" in out and "#7" in out
+
+
+def test_claiming_twice_on_the_branch_commits_once(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    wt = work_tree(p, tmp_path)
+    assert p.run("claim", "Add a snooze button", cwd=wt)[0] == 0
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
+    assert rc == 0, err
+    assert "already marked" in out
+    assert git(wt, "rev-list", "--count", "origin/main..HEAD").strip() == "1"
+
+
+def test_an_item_a_mark_on_main_holds_is_refused(tmp_path: Path) -> None:
+    p = make_project(
+        tmp_path, todo=claimed(TODO, "Add a snooze button", "agent-b", "2026-11-01")
     )
-    assert done.returncode != 0
-    assert "CONFLICT" in done.stdout
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
+    assert rc == 3
+    assert "agent-b" in out + err and "default branch" in out + err
+
+
+def test_a_pull_request_whose_branch_cannot_be_read_stops_a_claim(
+    tmp_path: Path,
+) -> None:
+    p = make_project(tmp_path)
+    p.prs(
+        "open",
+        [
+            {
+                "number": 7,
+                "headRefName": "work/not-fetched",
+                "headRefOid": "0" * 40,
+                "isCrossRepository": False,
+            }
+        ],
+    )
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
+    assert rc == 1
+    assert "#7" in out + err
+    assert (wt / "docs" / "todo.md").read_text() == TODO
+
+
+def test_github_unreachable_refuses_the_claim(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    wt = work_tree(p, tmp_path)
+    p.gh_fails()
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
+    assert rc == 1
+    assert "claims weren't checked" in out + err
+    assert (wt / "docs" / "todo.md").read_text() == TODO
+
+
+def test_uncommitted_changes_to_the_todo_file_are_refused(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    wt = work_tree(p, tmp_path)
+    path = wt / "docs" / "todo.md"
+    path.write_text(path.read_text() + "\n- **A new entry.**\n")
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
+    assert rc == 1
+    assert "uncommitted" in out + err
 
 
 def test_an_item_not_in_the_todo_file_is_unclear_and_lists_close_titles(
     tmp_path: Path,
 ) -> None:
     p = make_project(tmp_path)
-    rc, out, err = p.run("claim", "snooze")
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("claim", "snooze", cwd=wt)
     assert rc == 2
     assert "Add a snooze button" in out + err
 
@@ -116,95 +158,9 @@ def test_an_item_is_matched_by_its_title_ignoring_case_and_end_punctuation(
     tmp_path: Path,
 ) -> None:
     p = make_project(tmp_path)
-    rc, _, err = p.run("claim", "add a SNOOZE button.")
+    wt = work_tree(p, tmp_path)
+    rc, _, err = p.run("claim", "add a SNOOZE button.", cwd=wt)
     assert rc == 0, err
-
-
-def test_your_own_claim_on_main_is_already_yours(tmp_path: Path) -> None:
-    p = make_project(
-        tmp_path, todo=claimed(TODO, "Add a snooze button", "agent-a", "2026-11-21")
-    )
-    rc, out, _ = p.run("claim", "Add a snooze button")
-    assert rc == 0
-    assert "already yours" in out
-
-
-def test_a_release_removes_the_mark_in_its_own_branch(tmp_path: Path) -> None:
-    p = make_project(
-        tmp_path, todo=claimed(TODO, "Add a snooze button", "agent-a", "2026-11-21")
-    )
-    rc, _, err = p.run("release", "Add a snooze button")
-    assert rc == 0, err
-    assert p.origin_file("docs/todo.md", "release/add-a-snooze-button") == TODO
-    subject = git(
-        p.origin, "log", "-1", "--format=%s", "release/add-a-snooze-button"
-    ).strip()
-    assert subject == "chore: release the claim on Add a snooze button"
-
-
-def test_releasing_someone_elses_claim_needs_their_name(tmp_path: Path) -> None:
-    p = make_project(
-        tmp_path, todo=claimed(TODO, "Add a snooze button", "agent-b", "2026-11-01")
-    )
-    rc, out, err = p.run("release", "Add a snooze button")
-    assert rc == 3
-    assert "agent-b" in out + err
-    rc, _, err = p.run("release", "Add a snooze button", "--holder", "agent-b")
-    assert rc == 0, err
-
-
-def test_releasing_an_unclaimed_item_is_an_error(tmp_path: Path) -> None:
-    p = make_project(tmp_path)
-    rc, out, err = p.run("release", "Add a snooze button")
-    assert rc == 1
-    assert "not claimed" in out + err
-
-
-def test_the_claim_leaves_no_worktree_behind(tmp_path: Path) -> None:
-    p = make_project(tmp_path)
-    before = git(p.clone, "worktree", "list")
-    p.run("claim", "Add a snooze button")
-    assert git(p.clone, "worktree", "list") == before
-
-
-def test_options_before_the_subcommand_still_count(tmp_path: Path) -> None:
-    p = make_project(tmp_path)
-    elsewhere = tmp_path / "elsewhere"
-    elsewhere.mkdir()
-    rc, out, err = p.run(
-        "-C", str(p.clone), "--json", "claim", "Add a snooze button", cwd=elsewhere
-    )
-    assert rc == 0, err
-    assert json.loads(out)["branch"] == "claim/add-a-snooze-button"
-
-
-def test_a_claim_that_conflicts_with_a_neighbours_claim_is_rebuilt_on_main(
-    tmp_path: Path,
-) -> None:
-    """Git sees edits on adjacent lines as one conflict, so a claim on the next entry blocks ours though the
-    item is still free: claiming again rebuilds ours on the new main."""
-    p = make_project(tmp_path)
-    assert p.run("claim", "Add a snooze button")[0] == 0
-    neighbour = claimed(
-        TODO, "Show the time left in the title", "agent-b", "2026-11-22"
-    )
-    git(p.clone, "checkout", "-q", "--detach", "origin/main")
-    p.push_files(
-        {"docs/todo.md": neighbour}, "chore: claim Show the time left in the title"
-    )
-    rc, out, err = p.run("claim", "Add a snooze button")
-    assert rc == 0, err
-    assert "rebuilt" in out
-    want = claimed(neighbour, "Add a snooze button", "agent-a", "2026-11-22")
-    assert p.origin_file("docs/todo.md", "claim/add-a-snooze-button") == want
-
-
-def test_a_failed_auto_merge_is_reported(tmp_path: Path) -> None:
-    p = make_project(tmp_path)
-    (p.gh_dir / "merge_fail").write_text("")
-    rc, out, err = p.run("claim", "Add a snooze button")
-    assert rc == 0, err
-    assert "auto-merge not armed" in out + err
 
 
 def test_an_entry_needing_the_owner_cannot_be_claimed(tmp_path: Path) -> None:
@@ -212,83 +168,84 @@ def test_an_entry_needing_the_owner_cannot_be_claimed(tmp_path: Path) -> None:
         "- **Add a snooze button.**", "- **Add a snooze button.** (owner)"
     )
     p = make_project(tmp_path, todo=todo)
-    rc, out, err = p.run("claim", "Add a snooze button")
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
     assert rc == 3
     assert "owner" in out + err
 
 
 def test_a_claim_keeps_windows_line_endings(tmp_path: Path) -> None:
-    crlf = TODO.replace("\n", "\r\n")
-    p = make_project(tmp_path, todo=crlf)
-    rc, _, err = p.run("claim", "Add a snooze button")
+    p = make_project(tmp_path, todo=TODO.replace("\n", "\r\n"))
+    wt = work_tree(p, tmp_path)
+    rc, _, err = p.run("claim", "Add a snooze button", cwd=wt)
     assert rc == 0, err
-    stat = git(
-        p.origin, "diff", "--numstat", "main", "claim/add-a-snooze-button"
-    ).split()
+    stat = git(wt, "diff", "--numstat", "origin/main", "HEAD").split()
     assert stat[:2] == ["1", "1"]
 
 
-def test_rebuilding_a_claim_whose_pull_request_is_gone_opens_a_new_one(
-    tmp_path: Path,
-) -> None:
+def test_options_before_the_subcommand_still_count(tmp_path: Path) -> None:
     p = make_project(tmp_path)
-    assert p.run("claim", "Add a snooze button")[0] == 0
-    neighbour = claimed(
-        TODO, "Show the time left in the title", "agent-b", "2026-11-22"
+    wt = work_tree(p, tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    rc, out, err = p.run(
+        "-C", str(wt), "--json", "claim", "Add a snooze button", cwd=elsewhere
     )
-    p.push_files(
-        {"docs/todo.md": neighbour}, "chore: claim Show the time left in the title"
-    )
-    before = len([c for c in p.gh_calls() if c[:2] == ["pr", "create"]])
-    rc, _, err = p.run("claim", "Add a snooze button")
     assert rc == 0, err
-    assert len([c for c in p.gh_calls() if c[:2] == ["pr", "create"]]) == before + 1
-
-
-def test_rebuilding_a_claim_with_its_pull_request_open_opens_no_other(
-    tmp_path: Path,
-) -> None:
-    p = make_project(tmp_path)
-    assert p.run("claim", "Add a snooze button")[0] == 0
-    p.prs(
-        "open",
-        [
-            {
-                "number": 7,
-                "title": "chore: claim Add a snooze button",
-                "headRefName": "claim/add-a-snooze-button",
-                "url": "u",
-            }
-        ],
-    )
-    neighbour = claimed(
-        TODO, "Show the time left in the title", "agent-b", "2026-11-22"
-    )
-    p.push_files(
-        {"docs/todo.md": neighbour}, "chore: claim Show the time left in the title"
-    )
-    rc, _, err = p.run("claim", "Add a snooze button")
-    assert rc == 0, err
-    assert len([c for c in p.gh_calls() if c[:2] == ["pr", "create"]]) == 1
-
-
-def test_a_claim_can_be_released_while_the_milestone_is_overdue(tmp_path: Path) -> None:
-    from workrun import README
-
-    p = make_project(
-        tmp_path,
-        readme=README.replace("**By:** no date", "**By:** 2026-01-01"),
-        todo=claimed(TODO, "Add a snooze button", "agent-a", "2026-11-21"),
-    )
-    rc, _, err = p.run("release", "Add a snooze button")
-    assert rc == 0, err
+    assert json.loads(out)["branch"] == "work/snooze"
 
 
 def test_a_claim_without_a_name_to_claim_as_is_unclear(tmp_path: Path) -> None:
     p = make_project(tmp_path)
-    rc, out, err = p.run("claim", "Add a snooze button", who=None)
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("claim", "Add a snooze button", who=None, cwd=wt)
     assert rc == 2
     assert "GOAL_AS" in out + err
     rc, out, _ = p.run(who=None)
     assert rc == 0
     assert "GOAL_AS" in out
+
+
+def test_a_release_commits_the_mark_away_on_the_branch(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    wt = work_tree(p, tmp_path)
+    assert p.run("claim", "Add a snooze button", cwd=wt)[0] == 0
+    rc, out, err = p.run("release", "Add a snooze button", cwd=wt)
+    assert rc == 0, err
+    assert (wt / "docs" / "todo.md").read_text() == TODO
+    assert git(wt, "log", "-1", "--format=%s").strip() == (
+        "chore: release the claim on Add a snooze button"
+    )
+    assert "close" in out
+
+
+def test_releasing_someone_elses_mark_needs_their_name(tmp_path: Path) -> None:
+    p = make_project(
+        tmp_path, todo=claimed(TODO, "Add a snooze button", "agent-b", "2026-11-01")
+    )
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("release", "Add a snooze button", cwd=wt)
+    assert rc == 3
+    assert "agent-b" in out + err
+    rc, _, err = p.run("release", "Add a snooze button", "--holder", "agent-b", cwd=wt)
+    assert rc == 0, err
+    assert (wt / "docs" / "todo.md").read_text() == TODO
+
+
+def test_releasing_an_unmarked_item_is_an_error(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("release", "Add a snooze button", cwd=wt)
+    assert rc == 1
+    assert "not marked" in out + err
+
+
+def test_a_claim_can_be_released_while_the_milestone_is_overdue(tmp_path: Path) -> None:
+    p = make_project(
+        tmp_path,
+        readme=README.replace("**By:** no date", "**By:** 2026-01-01"),
+        todo=claimed(TODO, "Add a snooze button", "agent-a", "2026-11-21"),
+    )
+    wt = work_tree(p, tmp_path)
+    rc, _, err = p.run("release", "Add a snooze button", cwd=wt)
+    assert rc == 0, err

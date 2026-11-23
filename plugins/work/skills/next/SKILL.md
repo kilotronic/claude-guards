@@ -27,12 +27,14 @@ Take what it names, unless the user named an item; don't stop to offer it.
 - **cleanup**: nothing is free. Take a risk-free cleanup: delete dead code, merge a duplicate, fix a test or a
   doc. A cleanup needs no claim.
 - **Exit 2** (unclear): relay what `goal` names as missing and ask the owner. Never pick something instead.
+- **`warning: you hold the later claim`**: another pull request marked that item first. Stop that work: close
+  your pull request, or move its work to another item (`/work:work-start` on it, after `goal release`).
 
 ## 2. Start it
 
-Run `/work:work-start` on the item. It proves the item is still open, claims it in the todo file (the claim
-pull request merges before any code), makes the worktree and branch, posts the standup step, and restates
-what done means. If the claim fails because someone else took it, go back to step 1.
+Run `/work:work-start` on the item. It proves the item is still open, makes the worktree and branch, commits
+the claim mark and opens the work's pull request at once (that open pull request is the claim), posts the
+standup step, and restates what done means. If someone else took the item, go back to step 1.
 
 ## 3. Red, then green
 
@@ -49,7 +51,7 @@ the last one, the limit, a rollover. The comfortable middle is where these bugs 
 
 ## 5. Land it
 
-Run `/work:work-finish`. It removes the entry in this work's own pull request (which ends the claim), adds
+Run `/work:work-finish`. It removes the entry in this work's own pull request (the claim ends when it merges), adds
 follow-ups as new entries, runs the repo's gates and review, and cleans up once the pull request shows MERGED.
 
 ## 6. Close out

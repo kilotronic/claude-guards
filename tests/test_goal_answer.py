@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""goal's answer, run as a command in a made-up project: the order, the limit, stale claims, unclear repos."""
+"""goal's answer, run as a command in a made-up project: the order, the limit, unclear repos."""
 
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ def test_the_text_answer_says_goal_next_and_in_progress(tmp_path: Path) -> None:
 
 
 def test_your_own_claim_comes_before_everything(tmp_path: Path) -> None:
-    todo = claimed(TODO, "Show the time left in the title", "agent-a", "2026-11-21")
-    p = make_project(tmp_path, todo=todo)
+    p = make_project(tmp_path)
+    p.open_claim("Show the time left in the title", "agent-a", 7)
     rc, out = p.json()
     assert rc == 0
     assert out["next"]["kind"] == "own"
@@ -40,15 +40,15 @@ def test_your_own_claim_comes_before_everything(tmp_path: Path) -> None:
 
 
 def test_someone_elses_claim_is_not_yours(tmp_path: Path) -> None:
-    todo = claimed(TODO, "Show the time left in the title", "agent-b", "2026-11-21")
-    p = make_project(tmp_path, todo=todo)
+    p = make_project(tmp_path)
+    p.open_claim("Show the time left in the title", "agent-b", 7)
     _, out = p.json()
     assert out["next"]["kind"] == "defect"
 
 
 def test_defect_fixes_run_one_at_a_time(tmp_path: Path) -> None:
-    todo = claimed(TODO, "The timer skips a second", "agent-b", "2026-11-21")
-    p = make_project(tmp_path, todo=todo)
+    p = make_project(tmp_path)
+    p.open_claim("The timer skips a second", "agent-b", 7)
     rc, out = p.json()
     assert rc == 0
     # The second defect waits for the first fix; the next item is taken instead.
@@ -75,8 +75,10 @@ def test_the_last_item_is_taken(tmp_path: Path) -> None:
 
 
 def test_the_last_item_held_by_someone_else_leaves_a_cleanup(tmp_path: Path) -> None:
-    todo = "## Defects\n\n## Next\n\n- **Add a snooze button.** [claimed by agent-b on box2, 2026-11-21]\n"
-    p = make_project(tmp_path, todo=todo)
+    p = make_project(
+        tmp_path, todo="## Defects\n\n## Next\n\n- **Add a snooze button.**\n"
+    )
+    p.open_claim("Add a snooze button", "agent-b", 7)
     _, out = p.json()
     assert out["next"]["kind"] == "cleanup"
     assert out["in_progress"]["count"] == 1
@@ -85,8 +87,8 @@ def test_the_last_item_held_by_someone_else_leaves_a_cleanup(tmp_path: Path) -> 
 def test_one_under_the_limit_takes_the_next_item_without_a_warning(
     tmp_path: Path,
 ) -> None:
-    todo = claimed(TODO, "The timer skips a second", "agent-b", "2026-11-21")
-    p = make_project(tmp_path, todo=todo)
+    p = make_project(tmp_path)
+    p.open_claim("The timer skips a second", "agent-b", 7)
     _, out = p.json()
     assert out["in_progress"]["count"] == 1
     assert out["next"]["kind"] == "next"
@@ -96,9 +98,9 @@ def test_one_under_the_limit_takes_the_next_item_without_a_warning(
 def test_at_the_limit_the_next_item_comes_with_a_warning_not_a_block(
     tmp_path: Path,
 ) -> None:
-    todo = claimed(TODO, "The timer skips a second", "agent-b", "2026-11-21")
-    todo = claimed(todo, "Add a snooze button", "agent-c", "2026-11-21")
-    p = make_project(tmp_path, todo=todo)
+    p = make_project(tmp_path)
+    p.open_claim("The timer skips a second", "agent-b", 7)
+    p.open_claim("Add a snooze button", "agent-c", 8)
     rc, out = p.json()
     assert rc == 0
     assert out["in_progress"]["count"] == 2
@@ -110,74 +112,12 @@ def test_at_the_limit_the_next_item_comes_with_a_warning_not_a_block(
     assert "warning: taking this makes 3 in progress, over the limit of 2" in text
 
 
-def test_a_claim_with_no_activity_for_three_days_is_flagged_stale(
-    tmp_path: Path,
-) -> None:
-    todo = claimed(TODO, "Add a snooze button", "agent-b", "2026-11-19")
-    p = make_project(tmp_path, todo=todo)
-    rc, out = p.json()
-    assert rc == 0
-    (claim,) = out["in_progress"]["claims"]
-    assert claim["title"] == "Add a snooze button"
-    assert claim["stale"] is True
-    assert out["stale"] == ["Add a snooze button"]
-    _, text, _ = p.run()
-    assert 'stale: "Add a snooze button" claimed by agent-b on box1, 2026-11-19' in text
-    # Flagged, never removed: the mark is still on main.
-    assert "[claimed by agent-b" in p.origin_file("docs/todo.md")
-
-
-def test_a_claim_two_days_old_is_not_stale(tmp_path: Path) -> None:
-    todo = claimed(TODO, "Add a snooze button", "agent-b", "2026-11-20")
-    p = make_project(tmp_path, todo=todo)
-    _, out = p.json()
-    assert out["in_progress"]["claims"][0]["stale"] is False
-
-
-def test_an_open_pull_request_for_the_item_keeps_an_old_claim_fresh(
-    tmp_path: Path,
-) -> None:
-    todo = claimed(TODO, "Add a snooze button", "agent-b", "2026-11-01")
-    p = make_project(tmp_path, todo=todo)
-    p.prs(
-        "open",
-        [
-            {
-                "number": 3,
-                "title": "feat: add a snooze button",
-                "headRefName": "x",
-                "body": "",
-            }
-        ],
-    )
-    _, out = p.json()
-    assert out["in_progress"]["claims"][0]["stale"] is False
-
-
-def test_recent_commits_on_the_items_branch_keep_an_old_claim_fresh(
-    tmp_path: Path,
-) -> None:
-    todo = claimed(TODO, "Add a snooze button", "agent-b", "2026-11-01")
-    p = make_project(tmp_path, todo=todo)
-    p.branch("work/add-a-snooze-button", "2026-11-21")
-    _, out = p.json()
-    assert out["in_progress"]["claims"][0]["stale"] is False
-
-
-def test_old_commits_on_the_items_branch_do_not(tmp_path: Path) -> None:
-    todo = claimed(TODO, "Add a snooze button", "agent-b", "2026-11-01")
-    p = make_project(tmp_path, todo=todo)
-    p.branch("work/add-a-snooze-button", "2026-11-10")
-    _, out = p.json()
-    assert out["in_progress"]["claims"][0]["stale"] is True
-
-
 def test_when_github_cannot_be_reached_the_answer_says_so(tmp_path: Path) -> None:
     p = make_project(tmp_path)
     p.gh_fails()
     rc, out = p.json()
     assert rc == 0
-    assert "open pull requests not checked" in " ".join(out["warnings"])
+    assert "claims weren't checked" in " ".join(out["warnings"])
 
 
 def test_a_missing_readme_section_is_unclear_and_names_it(tmp_path: Path) -> None:

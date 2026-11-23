@@ -1,9 +1,10 @@
 ---
 name: work-start
 description:
-  Start one todo item properly. Proves it is still open, claims it in the todo file with goal claim (merged
-  before any code), makes the worktree and branch off origin/main, posts the standup step, and restates what
-  done means. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the next skill.
+  Start one todo item properly. Proves it is still open, makes the worktree and branch off origin/main, takes
+  it with standup claim, commits the claim mark with goal claim and opens the work's pull request at once (the
+  open pull request is the claim), posts the standup step, and restates what done means. Use for "start
+  <item>", "claim <item>", "pick up <item>", and at the end of the next skill.
 ---
 
 # Start an item
@@ -25,31 +26,7 @@ goal merged <a related branch>                                                  
 If the fix already landed, don't claim: delete the entry in a small docs pull request, citing the fix, and go
 back to `goal`. That is a complete, reportable outcome.
 
-## 2. Claim it
-
-```bash
-goal claim '<the entry's title>'
-```
-
-It opens a pull request that only marks the entry's line in the todo file with who has it, and arms
-auto-merge with the repo's merge method. Branch protection and the repo's review rules apply to it as to any
-pull request. **The claim holds only once that pull request is merged**:
-
-```bash
-gh pr checks <n> --watch --interval 60
-gh pr view <n> --json state -q .state        # MERGED: the item is yours
-```
-
-- Exit 3 from `goal claim` means someone else took it (or it needs the owner). Say so, and go back to `goal`.
-- A claim pull request that conflicts: run `goal claim '<title>'` again. Git treats a claim on the
-  neighboring entry as a conflict too, so while the item is still free on main it rebuilds your claim there
-  (with a new pull request if the old one is gone);
-  exit 3 means someone else took it. Then close your claim pull request, delete its branch, and go back to
-  `goal`.
-- A `warning: auto-merge not armed` means the claim pull request merges only by hand, by the repo's rules.
-- `goal` now answers **finish** with this item: that is the check that the claim is yours.
-
-## 3. Worktree and branch
+## 2. Worktree and branch
 
 `goal --json` gives the branch name (`.next.item.branch`, `work/<slug>` by default). Always a worktree, never
 the main checkout, branched from the up-to-date `origin/main`:
@@ -58,6 +35,28 @@ the main checkout, branched from the up-to-date `origin/main`:
 git worktree add ../<repo>-<slug> -b <branch> origin/main
 ```
 
+## 3. Claim it: the work's pull request is the claim
+
+In the worktree, in this order:
+
+```bash
+standup claim '<the entry's title>'     # if standup is installed: first come, first served
+goal claim '<the entry's title>'        # commits the mark on the entry's line, the branch's first commit
+git push -u origin <branch>
+gh pr create --title '<type>: <the work, in the imperative>' --body '<what and why; the item it claims>'
+```
+
+- **`standup claim` refuses**: another session is starting this item right now. Pick another item; don't
+  wait. It covers only the few seconds before the pull request exists: once that is open, the pull request is
+  the claim.
+- **`goal claim` exits 3**: an open pull request already holds the item (it names it), or the item needs the
+  owner. Remove the worktree and branch, and go back to `goal`.
+- **Open the pull request now**, ready (not draft), and **don't arm auto-merge**: work-finish does that
+  once the work is done. No CI or review has to pass before the work starts.
+- `goal` now answers **finish** with this item and names your pull request: that is the check that the claim
+  is yours. If it instead warns that **you hold the later claim**, another pull request marked the item first:
+  stop, close yours, and go back to `goal`.
+
 Then the repo's own set-up (its README or CLAUDE.md), in that worktree.
 
 ## 4. Post the standup step
@@ -65,7 +64,7 @@ Then the repo's own set-up (its README or CLAUDE.md), in that worktree.
 If standup is installed, from the worktree, so the branch is detected:
 
 ```bash
-standup status --goal '<the session goal>' --step 'started: <title>'
+standup status --goal '<the session goal>' --step 'started: <title>, #<n>'
 ```
 
 A subagent posts its own child row with `--as-subagent '<label>'` instead.

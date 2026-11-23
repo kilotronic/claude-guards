@@ -9,19 +9,20 @@ It reads, from the working copy (so goals edited locally count right away):
 - the todo file: its Defects and Next sections, top first, and the claim marks on their entries;
 - `.claude/work.toml`, optional: other heading names, entries that need the owner, the merge method.
 
-Claim marks are the exception: a claim is only real once its pull request has merged, so they are read from
-origin's default branch, found by asking GitHub (`gh repo view`), not from the local `origin/HEAD`, which can be
-stale. A mark that exists only in the working copy is reported as not yet merged and not counted. When GitHub
-can't be reached, goal says claims weren't checked and answers from the local files alone.
+Claims are the exception: the work's own pull request is the claim. An item is in progress while an open pull
+request into the default branch, found by asking GitHub (`gh repo view`, not the local `origin/HEAD`, which can be
+stale), carries a claim mark on the item's line. A mark on the default branch, from before claims moved to pull
+requests, still counts; a mark only the working copy has is reported and not counted. When GitHub can't be reached, goal says claims weren't checked and answers
+from the local files alone.
 
 Then it answers in a fixed order: your own claimed item; else the top free defect, one fix at a time; else the
 top free Next item, with a warning when that goes over the limit; else a cleanup. Nothing here blocks: the
 limit and the order are warnings and advice. When the repo doesn't say enough, it names what is missing and
 exits 2; it never guesses.
 
-Claims live in the todo file. `goal claim` opens a pull request that marks one entry's line, and the claim
-holds once that pull request merges. Two claims on one line conflict, so git is the lock. `goal release`
-removes a mark the same way. `goal merged <branch>` says whether a branch's work is on main.
+`goal claim` commits the mark on one entry's line as the work branch's first commit; the claim holds once the
+work's pull request is open. `goal release` commits the mark away. `goal merged <branch>` says whether a branch's
+work is on main.
 
 Exit codes: 0 an answer, 1 an error, 2 unclear (what is missing is named), 3 no (the item is someone else's,
 or the branch is not merged).
@@ -32,24 +33,22 @@ Python 3.9 or later, standard library only.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime as dt
 import getpass
 import hashlib
 import json
 import os
 import re
-import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 SECTION = "How work runs here"
 STALE_DAYS = 3
 OK, ERROR, UNCLEAR, NO = 0, 1, 2, 3
-CLAIM_PREFIX, RELEASE_PREFIX = "claim/", "release/"
 # The mark ends the entry's first line, so the entry still starts with its bold lead for any check that reads it.
 MARK = re.compile(
     r" \[claimed by (?P<who>[^\]]+?) on (?P<machine>[^\],]+), (?P<date>\d{4}-\d{2}-\d{2})\](?=\r?\n?$)"
@@ -73,7 +72,7 @@ class Settings:
     defects: list[str] = field(default_factory=lambda: ["Defects", "Bugs"])
     next: list[str] = field(default_factory=lambda: ["Next"])
     skip: list[str] = field(default_factory=lambda: ["(owner)"])
-    merge_method: str = "squash"
+    merge_method: str = "squash"  # how the pr skill merges; goal only checks it
     branch_prefix: str = "work/"
     named_defects: bool = False  # true when the settings file named the defects heading
 
@@ -214,6 +213,20 @@ class Claim:
     who: str
     machine: str
     date: str
+    # The open pull request whose branch carries the mark; None for a mark read from a file alone.
+    pr: int | None = None
+    author: str | None = None
+    url: str | None = None
+    head: str | None = None
+    active: str | None = None  # the pull request's last activity, YYYY-MM-DD
+
+    @property
+    def mark(self) -> tuple[str, str, str]:
+        return (self.who, self.machine, self.date)
+
+    def holder(self) -> str:
+        where = f"#{self.pr}" if self.pr else "a mark on the default branch"
+        return f"{where} ({self.who} on {self.machine})"
 
 
 @dataclass
@@ -379,32 +392,11 @@ def _date(text: str) -> dt.date | None:
         return None
 
 
-def _days(a: str, b: dt.date) -> int:
-    return (b - dt.date.fromisoformat(a)).days
-
-
-def is_stale(
-    entry: Entry, today: dt.date, prs: list[dict] | None, branches: dict[str, dt.date]
-) -> bool:
-    """No open pull request names the item, and no branch named for it has a commit, for STALE_DAYS."""
-    if entry.claim is None or _days(entry.claim.date, today) < STALE_DAYS:
-        return False
-    k, s = key(entry.title), slug(entry.title)
-    for pr in prs or []:
-        head = pr.get("headRefName") or ""
-        if head.startswith((CLAIM_PREFIX, RELEASE_PREFIX)):
-            continue
-        if (
-            k in key(pr.get("title") or "")
-            or k in key(pr.get("body") or "")
-            or (s and s in head)
-        ):
-            return False
-    for name, last in branches.items():
-        named = s and s in name and not name.startswith((CLAIM_PREFIX, RELEASE_PREFIX))
-        if named and (today - last).days < STALE_DAYS:
-            return False
-    return True
+def is_stale(claim: Claim, today: dt.date) -> bool:
+    """No activity on the claim's pull request for STALE_DAYS. A mark read from a file alone, when GitHub can't be
+    reached, has no pull request to judge."""
+    active = _date(claim.active or "")
+    return active is not None and (today - active).days >= STALE_DAYS
 
 
 def _free(e: Entry, settings: Settings) -> bool:
@@ -606,25 +598,22 @@ class Repo:
         except OSError:
             return None
 
-    def branches(self) -> dict[str, dt.date]:
+    def branch_name(self) -> str | None:
+        """The checked-out branch, or None on a detached HEAD."""
         done = run(
-            [
-                "git",
-                "for-each-ref",
-                "refs/remotes/origin",
-                "--format=%(refname:lstrip=3)%09%(committerdate:short)",
-            ],
-            self.root,
-            check=False,
+            ["git", "symbolic-ref", "--short", "-q", "HEAD"], self.root, check=False
         )
-        out: dict[str, dt.date] = {}
-        for ln in done.stdout.splitlines():
-            name, _, day = ln.partition("\t")
-            try:
-                out[name] = dt.date.fromisoformat(day)
-            except ValueError:
-                continue
-        return out
+        return (done.stdout.strip() or None) if done.returncode == 0 else None
+
+    def has_commit(self, rev: str) -> bool:
+        return (
+            run(
+                ["git", "rev-parse", "--verify", "-q", rev + "^{commit}"],
+                self.root,
+                check=False,
+            ).returncode
+            == 0
+        )
 
 
 @dataclass
@@ -635,15 +624,103 @@ class State:
     todo_path: str
     todo_text: str
     todo: Todo
-    unmerged: list[str] = field(
+    claims_checked: bool = False
+    uncounted: list[str] = field(
         default_factory=list
-    )  # titles marked only in the working copy
+    )  # marked only in the working copy
+    on_base: list[str] = field(
+        default_factory=list
+    )  # held by a mark on the default branch
+    conflicts: list[tuple[str, list[Claim]]] = field(default_factory=list)
+    unread: list[int] = field(
+        default_factory=list
+    )  # open pull requests whose branch couldn't be read
 
 
-def _merged_claims(
-    repo: Repo, path: str, settings: Settings
+@dataclass
+class Live:
+    """The claims by title key, first come first: marks on the default branch, then the open pull requests' marks;
+    and the default branch's marks alone, which every branch made from it carries."""
+
+    holders: dict[str, list[Claim]]
+    on_base: dict[str, Claim]
+    unread: list[int] = field(
+        default_factory=list
+    )  # open pull requests whose branch couldn't be read
+
+
+def _pr_head(repo: Repo, pr: dict) -> str | None:
+    """A local name for the pull request's head: its exact commit when fetched, else origin's branch of that name.
+    The caller never asks for a fork's pull request."""
+    oid = pr.get("headRefOid")
+    if (
+        isinstance(oid, str)
+        and re.fullmatch(r"[0-9a-f]{40}", oid)
+        and repo.has_commit(oid)
+    ):
+        return oid
+    name = pr.get("headRefName")
+    if not isinstance(name, str) or not name:
+        return None
+    ref = f"refs/remotes/origin/{name}"
+    return ref if repo.has_commit(ref) else None
+
+
+def _branch_marks(
+    repo: Repo, head: str, path: str, settings: Settings, keys: set[str]
+) -> dict[str, Claim]:
+    """The marks a branch carries, by title key. An entry its tip no longer has is judged by the latest commit on
+    the branch that still had it: work-finish deletes the claimed entry in the work's last commit, and the claim
+    holds until the pull request merges."""
+    entries = {
+        key(e.title): e
+        for e in parse_todo(repo.show(path, ref=head) or "", settings).entries
+    }
+    out = {k: e.claim for k, e in entries.items() if e.claim}
+    gone = keys - set(entries)
+    if not gone:
+        return out
+    revs = run(
+        ["git", "rev-list", "--max-count=20", f"{repo.ref}..{head}", "--", path],
+        repo.root,
+        check=False,
+    ).stdout.split()
+    for rev in revs:
+        older = {
+            key(e.title): e
+            for e in parse_todo(repo.show(path, ref=rev) or "", settings).entries
+        }
+        for k in gone & set(older):
+            claim = older[k].claim
+            if claim:
+                out[k] = claim
+        gone -= set(older)
+        if not gone:
+            break
+    return out
+
+
+def _fork_marks(
+    repo: Repo, head: str, path: str, settings: Settings
 ) -> dict[str, Claim] | None:
-    """Claim marks on origin's default branch by title key, or None when they can't be read."""
+    """The marks on the default branch where the branch left it, by title key; None when that can't be found. A
+    mark the branch has only because it was there then is not the pull request's claim, even once it is gone
+    from the default branch."""
+    done = run(["git", "merge-base", repo.ref, head], repo.root, check=False)
+    base = done.stdout.strip()
+    if done.returncode != 0 or not base:
+        return None
+    return {
+        key(e.title): e.claim
+        for e in parse_todo(repo.show(path, ref=base) or "", settings).entries
+        if e.claim
+    }
+
+
+def _live_claims(
+    repo: Repo, path: str, settings: Settings, keys: set[str]
+) -> Live | None:
+    """The claims the open pull requests into the default branch carry, or None when they can't be read."""
     if repo.asked_github is None:
         repo.warnings.append(
             "claims weren't checked: could not ask GitHub for the default branch; answering from the local files"
@@ -654,22 +731,82 @@ def _merged_claims(
             f"claims weren't checked: no {repo.ref} here; answering from the local files"
         )
         return None
-    text = repo.show(path)
-    if text is None:
-        return {}
-    todo = parse_todo(text, settings)
-    return {key(e.title): e.claim for e in todo.entries if e.claim}
+    prs = gh_json(
+        [
+            "pr",
+            "list",
+            "--state",
+            "open",
+            "--base",
+            repo.base,
+            "--limit",
+            "200",
+            "--json",
+            "number,headRefName,headRefOid,isCrossRepository,author,url,updatedAt",
+        ],
+        repo.root,
+    )
+    if prs is None:
+        repo.warnings.append(
+            "claims weren't checked: could not list the open pull requests on GitHub; answering from the local files"
+        )
+        return None
+    on_base = {
+        key(e.title): e.claim
+        for e in parse_todo(repo.show(path) or "", settings).entries
+        if e.claim
+    }
+    # A mark on the default branch, made before claims moved to pull requests, still holds, and holds first.
+    holders: dict[str, list[Claim]] = {
+        k: [dataclasses.replace(c, active=c.date)] for k, c in on_base.items()
+    }
+    unread: list[int] = []
+    # Never a fork's pull request: anyone can open one, so it can't hold an item.
+    for pr in sorted(
+        (
+            pr
+            for pr in prs
+            if isinstance(pr.get("number"), int)
+            and pr.get("isCrossRepository") is False
+        ),
+        key=lambda pr: pr["number"],
+    ):
+        head = _pr_head(repo, pr)
+        if head is None:
+            unread.append(pr["number"])
+            repo.warnings.append(
+                f"could not read the branch of #{pr['number']}: a claim it carries isn't counted"
+            )
+            continue
+        author = pr.get("author")
+        before = _fork_marks(repo, head, path, settings)
+        if before is None:
+            before = on_base
+        for k, c in _branch_marks(repo, head, path, settings, keys).items():
+            if k in before and before[k].mark == c.mark:
+                continue  # on the default branch where this branch left it, so not this pull request's
+            holders.setdefault(k, []).append(
+                Claim(
+                    c.who,
+                    c.machine,
+                    c.date,
+                    pr=pr["number"],
+                    author=author.get("login") if isinstance(author, dict) else None,
+                    url=pr.get("url"),
+                    head=pr.get("headRefName"),
+                    active=(pr.get("updatedAt") or "")[:10] or None,
+                )
+            )
+    return Live(holders, on_base, unread)
 
 
 def load(
-    repo: Repo, today: dt.date, need_goal: bool = True, local: bool = False
+    repo: Repo, today: dt.date, need_goal: bool = True
 ) -> tuple[State | None, dict, list[str]]:
-    """Everything the answer needs, or the list of what is missing. `local` reads the working copy and takes the
-    claim marks from origin's default branch; otherwise everything is read from that branch, as a claim needs."""
+    """Everything the answer needs, or the list of what is missing. The files come from the working copy; the
+    claims from the open pull requests, or from the working copy's marks when GitHub can't be reached."""
     missing: list[str] = []
-    read = repo.read if local else repo.show
-    where = "the working copy" if local else repo.ref
-    readme = read("README.md")
+    readme = repo.read("README.md")
     facts = parse_readme(readme or "")
     goal_info: dict = {}
     if facts is None:
@@ -710,27 +847,16 @@ def load(
     limit = wip_limit(facts)
     if limit is None:
         missing.append("no **Work in progress:** line saying `at most <N>`")
-    text = read(SETTINGS_PATH)
+    text = repo.read(SETTINGS_PATH)
     try:
         settings = parse_settings(text) if text is not None else Settings()
     except ValueError as e:
         missing.append(str(e))
         settings = Settings()
-    todo_text = read(path) if path else None
+    todo_text = repo.read(path) if path else None
     if path and todo_text is None:
-        missing.append(f"{path} is not in {where}")
+        missing.append(f"{path} is not in the working copy")
     todo = parse_todo(todo_text or "", settings)
-    unmerged: list[str] = []
-    if local and path and todo_text is not None:
-        merged_claims = _merged_claims(repo, path, settings)
-        if (
-            merged_claims is not None
-        ):  # unchecked: the marks stay as the working copy has them
-            for e in todo.entries:
-                counted = merged_claims.get(key(e.title))
-                if e.claim and e.claim != counted:
-                    unmerged.append(e.title)
-                e.claim = counted
     if todo_text is not None:
         missing += [f"{path} has no {m}" for m in todo.missing]
         for e in todo.entries:
@@ -741,7 +867,23 @@ def load(
     if missing:
         return None, goal_info, missing
     assert path is not None and todo_text is not None
-    return State(repo, facts, settings, path, todo_text, todo, unmerged), goal_info, []
+    state = State(repo, facts, settings, path, todo_text, todo)
+    live = _live_claims(repo, path, settings, {key(e.title) for e in todo.entries})
+    if live is None:  # unchecked: the marks stay as the working copy has them
+        return state, goal_info, []
+    state.claims_checked = True
+    state.unread = live.unread
+    for e in todo.entries:
+        k = key(e.title)
+        held = live.holders.get(k, [])
+        if e.claim and not any(h.mark == e.claim.mark for h in held):
+            state.uncounted.append(e.title)
+        if k in live.on_base:
+            state.on_base.append(e.title)
+        e.claim = held[0] if held else None
+        if len(held) > 1:
+            state.conflicts.append((e.title, held))
+    return state, goal_info, []
 
 
 def me_from_env(label: str | None) -> Me:
@@ -771,14 +913,13 @@ NO_NAME = (
 
 def answer(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
     repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
-    state, goal_info, missing = load(repo, today, local=True)
-    claims_checked = repo.asked_github is not None and repo.has_ref
+    state, goal_info, missing = load(repo, today)
     out: dict = {
         "status": "ok",
         "goal": goal_info,
         "warnings": list(repo.warnings),
         "source": "working copy",
-        "claims_from": repo.ref if claims_checked else None,
+        "claims_from": repo.ref if state and state.claims_checked else None,
     }
     if "frozen" in goal_info:
         out["next"] = {
@@ -790,46 +931,52 @@ def answer(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
     if state is None:
         out.update(status="unclear", missing=missing, next=None)
         return UNCLEAR, out
-    out["unmerged_claims"] = state.unmerged
-    out["warnings"] += [
-        f'the claim mark on "{t}" is not yet merged to {repo.ref}: it is not counted as a claim'
-        for t in state.unmerged
-    ]
     me = me_from_env(args.as_)
+    out["uncounted_claims"] = state.uncounted
+    out["warnings"] += [
+        f'the claim mark on "{t}" is not counted: no open pull request carries it (push its branch and open the'
+        " pull request)"
+        for t in state.uncounted
+    ] + [
+        f'"{t}" is held by a mark on {repo.ref}, made before claims moved to pull requests: it counts until the'
+        " work deletes the entry, or its holder (or the owner, with goal release --holder) removes the mark"
+        for t in state.on_base
+    ]
+    out["conflicts"] = []
+    for title, held in state.conflicts:
+        first, later = held[0], held[1:]
+        out["conflicts"].append(
+            {
+                "title": title,
+                "holder": asdict(first),
+                "later": [asdict(c) for c in later],
+            }
+        )
+        out["warnings"].append(
+            f'"{title}" is marked by more than one open pull request: {first.holder()} came first and holds it;'
+            f" {', '.join(c.holder() for c in later)} came later and should stop"
+        )
+        out["warnings"] += [
+            f'you hold the later claim on "{title}" in #{c.pr}: stop, and close it, or move its work to another'
+            " item with goal release"
+            for c in later
+            if (c.who, c.machine) == (me.who, me.machine)
+        ]
     if not me.named:
         out["warnings"].append(
             f"{NO_NAME}; your own claims are told apart by the login name only"
         )
     limit = wip_limit(state.facts)
     assert limit is not None
-    prs = gh_json(
-        [
-            "pr",
-            "list",
-            "--state",
-            "open",
-            "--limit",
-            "200",
-            "--json",
-            "number,title,headRefName,body",
-        ],
-        repo.root,
-    )
-    if prs is None:
-        out["warnings"].append(
-            "open pull requests not checked (gh failed): a stale flag may be wrong"
-        )
-    branches = repo.branches()
-    claims = []
-    for e in state.todo.entries:
-        if e.claim:
-            claims.append(
-                {
-                    **_item(e),
-                    **asdict(e.claim),
-                    "stale": is_stale(e, today, prs, branches),
-                }
-            )
+    claims = [
+        {
+            **_item(e, state.settings),
+            **asdict(e.claim),
+            "stale": is_stale(e.claim, today),
+        }
+        for e in state.todo.entries
+        if e.claim
+    ]
     nxt, warnings = decide(state.todo, me, limit, state.settings)
     out.update(
         todo=state.todo_path,
@@ -885,8 +1032,16 @@ def render(out: dict) -> str:
     for c in ip["claims"]:
         if c["stale"]:
             lines.append(
-                f'stale: "{c["title"]}" claimed by {c["who"]} on {c["machine"]}, {c["date"]}: no open pull request'
-                f" or branch activity for {STALE_DAYS} days (flagged only; the holder or the owner releases it)"
+                (
+                    f'stale: "{c["title"]}" in #{c["pr"]} by {c["who"]} on {c["machine"]}: no activity for'
+                    f" {STALE_DAYS} days (flagged only; its holder, or the owner, closes the pull request)"
+                )
+                if c.get("pr")
+                else (
+                    f'stale: "{c["title"]}" claimed by {c["who"]} on {c["machine"]}, {c["date"]}, by a mark on the'
+                    f" default branch: {STALE_DAYS} days old (flagged only; its holder, or the owner with goal"
+                    " release --holder, removes the mark)"
+                )
             )
     lines += [f"warning: {w}" for w in out["warnings"]]
     if out.get("needs_owner"):
@@ -899,12 +1054,12 @@ def render(out: dict) -> str:
         lines += [
             f"  {i['section']}: {i['title']} (line {i['line']})" for i in out["free"]
         ] or ["  none"]
-        held = [c for c in ip["claims"]]
-        if held:
+        if ip["claims"]:
             lines.append("claimed:")
             lines += [
                 f"  {c['title']}: {c['who']} on {c['machine']}, {c['date']}"
-                for c in held
+                + (f", #{c['pr']}" if c.get("pr") else "")
+                for c in ip["claims"]
             ]
     return "\n".join(lines)
 
@@ -923,228 +1078,156 @@ def find(todo: Todo, name: str) -> Entry:
     raise Unclear(f'no entry titled "{name}"{hint}')
 
 
-def change(
-    args: argparse.Namespace, today: dt.date, claiming: bool
-) -> tuple[int, dict]:
-    """Open the tiny pull request that marks (claim) or unmarks (release) one entry."""
+def _work_branch(repo: Repo, verb: str) -> str:
+    """The branch the mark is committed on: the work's own, never the default branch."""
+    name = repo.branch_name()
+    if not name or name == repo.base:
+        raise RuntimeError(
+            f"the mark goes on the work's own branch: run goal {verb} in the work's worktree, not on"
+            f" {name or 'a detached HEAD'}"
+        )
+    return name
+
+
+def _commit(repo: Repo, path: str, text: str, subject: str, body: str) -> None:
+    """Write the todo file and commit only it. The file must have no other changes, so the commit is just the
+    mark."""
+    target = repo.root / path
+    if target.is_symlink() or not target.resolve().is_relative_to(repo.root.resolve()):
+        raise RuntimeError(
+            f"{path} is a link or outside the repo: goal only writes a plain file"
+        )
+    if run(
+        ["git", "diff", "--quiet", "HEAD", "--", path], repo.root, check=False
+    ).returncode:
+        raise RuntimeError(
+            f"{path} has uncommitted changes: commit or drop them first, so this commit holds only the mark"
+        )
+    target.write_bytes(text.encode("utf-8"))
+    try:
+        run(["git", "add", "--", path], repo.root)
+        run(
+            ["git", "commit", "-q", "-m", subject, "-m", body, "--", path],
+            repo.root,
+            timeout=300,
+        )
+    except RuntimeError:
+        run(["git", "checkout", "HEAD", "--", path], repo.root, check=False)
+        raise
+
+
+def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
+    """Commit the mark on the work branch. Once the work's pull request is open, it carries the mark, and that is
+    the claim."""
     repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
-    repo.require_ref()
+    branch = _work_branch(repo, "claim")
     state, _, missing = load(repo, today, need_goal=False)
     if state is None:
         raise Unclear("; ".join(missing) or "this repo is frozen")
     entry = find(state.todo, args.item)
     me = me_from_env(args.as_)
-    if not me.named and not getattr(args, "holder", None):
+    if not me.named:
         raise Unclear(NO_NAME)
-    if claiming:
-        if entry.claim and (entry.claim.who, entry.claim.machine) == (
-            me.who,
-            me.machine,
-        ):
-            return OK, {
-                "status": "ok",
-                "message": f'"{entry.title}" is already yours on {repo.ref}',
-            }
-        if entry.claim:
-            c = entry.claim
-            raise Refused(
-                f'"{entry.title}" is claimed by {c.who} on {c.machine}, {c.date}: pick another item'
-            )
-        held = [m for m in state.settings.skip if m in entry.text]
-        if held:
-            raise Refused(
-                f'"{entry.title}" is marked {held[0]}: it needs the owner or planned work first. Pick another item'
-            )
-        claim = Claim(me.who, me.machine, today.isoformat())
-        text = mark(state.todo_text, entry.line, claim)
-        branch = CLAIM_PREFIX + slug(entry.title)
-        subject = f"chore: claim {entry.title}"
-        body = (
-            f"Marks the todo entry as taken by {claim.who} on {claim.machine}, so no other agent starts it. The"
-            " claim holds once this merges; a second claim on the same line conflicts and cannot merge."
+    if not state.claims_checked:
+        raise RuntimeError(
+            f"{'; '.join(repo.warnings)}. Claim once GitHub answers: an open pull request may already hold the item"
         )
-    else:
-        if entry.claim is None:
-            raise RuntimeError(f'"{entry.title}" is not claimed')
-        holder = args.holder or me.who
-        if entry.claim.who != holder:
-            c = entry.claim
-            raise Refused(
-                f'"{entry.title}" is claimed by {c.who} on {c.machine}, {c.date}, not you: to release it for them,'
-                f" pass --holder {c.who}"
-            )
-        text = unmark(state.todo_text, entry.line)
-        branch = RELEASE_PREFIX + slug(entry.title)
-        subject = f"chore: release the claim on {entry.title}"
-        body = f"Removes {entry.claim.who}'s claim mark so the item is free again; the work was not finished."
-    remote = run(
-        ["git", "ls-remote", "--exit-code", "--heads", "origin", branch],
-        repo.root,
-        check=False,
-    )
-    if remote.returncode == 0:
-        old = remote.stdout.split()[0] if remote.stdout.split() else ""
-        if claiming and _own_open_claim(repo, state, entry, me, branch):
-            # Git sees edits on adjacent lines as one conflict, so a claim on the next entry blocks ours though
-            # the item is still free on main: rebuild ours on the new main, and its pull request updates.
-            _push_change(repo, state.todo_path, text, branch, subject, body, lease=old)
-            open_prs = gh_json(
-                [
-                    "pr",
-                    "list",
-                    "--head",
-                    branch,
-                    "--state",
-                    "open",
-                    "--json",
-                    "number,url,headRefName",
-                ],
-                repo.root,
-            )
-            if open_prs is None:
-                repo.warnings.append(
-                    f"could not ask GitHub for {branch}'s pull request: check that one is open"
-                )
-            ours = [
-                pr for pr in open_prs or [] if pr.get("headRefName") in (None, branch)
-            ]
-            if open_prs is not None and not ours:
-                url = _open_pr(repo, branch, subject, body, args, state.settings)
-                where = f"opened a new pull request for it: {url}"
-            else:
-                if not args.no_merge:
-                    _arm(repo, branch, state.settings)
-                where = "its open pull request updates itself"
-            msg = (
-                f"rebuilt your claim on {branch} on the current {repo.ref}, since the item is still free there;"
-                f" {where}. Wait for it to merge, then run `goal`."
-            )
-            return OK, {
-                "status": "ok",
-                "branch": branch,
-                "url": None,
-                "message": msg,
-                "warnings": repo.warnings,
-            }
+    if state.unread:
+        raise RuntimeError(
+            f"could not read the branch of {', '.join(f'#{n}' for n in state.unread)}, which may hold this item:"
+            " fetch origin and try again"
+        )
+    held = entry.claim
+    if held and (held.who, held.machine) == (me.who, me.machine):
+        return OK, {
+            "status": "ok",
+            "branch": branch,
+            "message": f'"{entry.title}" is already yours: {held.holder()} carries your mark',
+            "warnings": repo.warnings,
+        }
+    if held:
+        raise Refused(f'"{entry.title}" is held by {held.holder()}: pick another item')
+    owner = [m for m in state.settings.skip if m in entry.text]
+    if owner:
         raise Refused(
-            f"origin already has {branch}: another {'claim' if claiming else 'release'} of this item is open. If its"
-            f" pull request is closed, delete the branch (git push origin --delete {branch}) and try again"
+            f'"{entry.title}" is marked {owner[0]}: it needs the owner or planned work first. Pick another item'
         )
-    _push_change(repo, state.todo_path, text, branch, subject, body)
-    url = _open_pr(repo, branch, subject, body, args, state.settings)
-    msg = (
-        f"claim pull request: {url}\nThe item is yours once it merges. Wait with `gh pr checks <n> --watch"
-        " --interval 60`, then run `goal`: it names the item as yours. If the pull request conflicts, run `goal"
-        " claim` again: it rebuilds the claim while the item is still free, and exits 3 when someone else took it."
-        if claiming
-        else f"release pull request: {url}"
+    line = state.todo_text.splitlines(keepends=True)[entry.line - 1]
+    current = MARK.search(line)
+    if current and (current["who"], current["machine"]) == (me.who, me.machine):
+        if run(
+            ["git", "diff", "--quiet", "HEAD", "--", state.todo_path],
+            repo.root,
+            check=False,
+        ).returncode:
+            raise RuntimeError(
+                f"{state.todo_path} has uncommitted changes: commit or drop them first"
+            )
+        return OK, {
+            "status": "ok",
+            "branch": branch,
+            "message": f'"{entry.title}" is already marked as yours on {branch}: push it and open the work\'s pull'
+            " request, which is the claim",
+            "warnings": repo.warnings,
+        }
+    text = state.todo_text
+    if (
+        current
+    ):  # a mark nothing counts: on no open pull request, and not on the default branch
+        text = unmark(text, entry.line)
+    mine = Claim(me.who, me.machine, today.isoformat())
+    _commit(
+        repo,
+        state.todo_path,
+        mark(text, entry.line, mine),
+        f"chore: claim {entry.title}",
+        f"Marks the todo entry as taken by {mine.who} on {mine.machine}. While the work's pull request is open, it"
+        " carries this mark, and that is the claim.",
     )
     return OK, {
         "status": "ok",
         "branch": branch,
-        "url": url,
-        "message": msg,
+        "message": f'marked "{entry.title}" on {branch}. Now push the branch and open the work\'s pull request'
+        " (ready, auto-merge not armed): once it is open, it is the claim.",
         "warnings": repo.warnings,
     }
 
 
-def _own_open_claim(
-    repo: Repo, state: State, entry: Entry, me: Me, branch: str
-) -> bool:
-    """The open claim branch for this item marks it with our name: ours, not someone else's."""
-    text = repo.show(state.todo_path, ref=f"origin/{branch}")
-    if text is None:
-        return False
-    try:
-        theirs = find(parse_todo(text, state.settings), entry.title)
-    except Unclear:
-        return False
-    return theirs.claim is not None and (theirs.claim.who, theirs.claim.machine) == (
-        me.who,
-        me.machine,
+def release(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
+    """Commit the mark away on the work branch, for work that goes on under another item. To drop the work, close
+    its pull request instead."""
+    repo = Repo(Path(args.C or "."), fetch=not args.no_fetch)
+    branch = _work_branch(repo, "release")
+    state, _, missing = load(repo, today, need_goal=False)
+    if state is None:
+        raise Unclear("; ".join(missing) or "this repo is frozen")
+    entry = find(state.todo, args.item)
+    me = me_from_env(args.as_)
+    if not me.named and not args.holder:
+        raise Unclear(NO_NAME)
+    current = MARK.search(state.todo_text.splitlines(keepends=True)[entry.line - 1])
+    if current is None:
+        raise RuntimeError(f'"{entry.title}" is not marked on {branch}')
+    holder = args.holder or me.who
+    if current["who"] != holder:
+        raise Refused(
+            f'"{entry.title}" is marked by {current["who"]} on {current["machine"]}, not you: to remove their mark,'
+            f" an owner call, pass --holder {current['who']}"
+        )
+    _commit(
+        repo,
+        state.todo_path,
+        unmark(state.todo_text, entry.line),
+        f"chore: release the claim on {entry.title}",
+        f"Removes {current['who']}'s claim mark, so the item is free again once this is pushed.",
     )
-
-
-def _push_change(
-    repo: Repo,
-    path: str,
-    text: str,
-    branch: str,
-    subject: str,
-    body: str,
-    lease: str | None = None,
-) -> None:
-    tmp = Path(tempfile.mkdtemp(prefix="goal-"))
-    work = tmp / "w"
-    try:
-        run(
-            ["git", "worktree", "add", "-q", "--detach", str(work), repo.ref], repo.root
-        )
-        target = work / path
-        if target.is_symlink() or not target.resolve().is_relative_to(work.resolve()):
-            raise RuntimeError(
-                f"{path} is a link or outside the repo: goal only writes a plain file"
-            )
-        target.write_bytes(text.encode("utf-8"))
-        run(["git", "add", "--", path], work)
-        run(["git", "commit", "-q", "-m", subject, "-m", body], work, timeout=300)
-        run(
-            ["git", "push", "-q", "origin", f"HEAD:refs/heads/{branch}"]
-            + ([f"--force-with-lease=refs/heads/{branch}:{lease}"] if lease else []),
-            work,
-            timeout=120,
-        )
-    finally:
-        run(["git", "worktree", "remove", "--force", str(work)], repo.root, check=False)
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-def _open_pr(
-    repo: Repo,
-    branch: str,
-    subject: str,
-    body: str,
-    args: argparse.Namespace,
-    s: Settings,
-) -> str:
-    done = run(
-        [
-            "gh",
-            "pr",
-            "create",
-            "--head",
-            branch,
-            "--base",
-            repo.base,
-            "--title",
-            subject,
-            "--body",
-            body,
-        ],
-        repo.root,
-        check=False,
-    )
-    if done.returncode != 0:
-        raise RuntimeError(
-            f"pushed {branch}, but `gh pr create` failed: {done.stderr.strip()}. Open its pull request by hand"
-        )
-    url = done.stdout.strip().splitlines()[-1] if done.stdout.strip() else branch
-    if not args.no_merge:
-        _arm(repo, url, s)
-    return url
-
-
-def _arm(repo: Repo, pr: str, s: Settings) -> None:
-    done = run(
-        ["gh", "pr", "merge", pr, "--auto", f"--{s.merge_method}"],
-        repo.root,
-        check=False,
-    )
-    if done.returncode != 0:
-        repo.warnings.append(
-            f"auto-merge not armed ({done.stderr.strip() or 'gh failed'}): the claim holds only once its pull"
-            " request merges, so merge it by the repo's rules"
-        )
+    return OK, {
+        "status": "ok",
+        "branch": branch,
+        "message": f'removed the mark on "{entry.title}" on {branch}. Push it, and the pull request no longer claims'
+        " the item. To drop the work instead, close the pull request (gh pr close <n>).",
+        "warnings": repo.warnings,
+    }
 
 
 def merged(args: argparse.Namespace) -> tuple[int, dict]:
@@ -1296,27 +1379,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command")
     c = sub.add_parser(
-        "claim", parents=[sub_common], help="open the pull request that claims an item"
+        "claim",
+        parents=[sub_common],
+        help="commit the mark that claims an item, on the work's own branch",
     )
     c.add_argument("item", help="the entry's title")
-    c.add_argument(
-        "--no-merge",
-        action="store_true",
-        help="open the pull request without arming auto-merge",
-    )
     r = sub.add_parser(
         "release",
         parents=[sub_common],
-        help="open the pull request that removes a claim mark",
+        help="commit the mark away, on the work's own branch",
     )
     r.add_argument("item", help="the entry's title")
     r.add_argument(
-        "--holder", help="release a claim another session holds (an owner call)"
-    )
-    r.add_argument(
-        "--no-merge",
-        action="store_true",
-        help="open the pull request without arming auto-merge",
+        "--holder", help="remove a mark another session made (an owner call)"
     )
     m = sub.add_parser(
         "merged",
@@ -1336,9 +1411,9 @@ def main(argv: list[str] | None = None) -> int:
         return ERROR
     try:
         if args.command == "claim":
-            rc, out = change(args, today, claiming=True)
+            rc, out = claim(args, today)
         elif args.command == "release":
-            rc, out = change(args, today, claiming=False)
+            rc, out = release(args, today)
         elif args.command == "merged":
             rc, out = merged(args)
         else:

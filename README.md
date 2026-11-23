@@ -129,7 +129,7 @@ The facts live in the README, where people read them too, under one heading, as 
 - **Mission:** <who this is for and what it does for them>
 - **Current milestone:** <name>. **Done when:** <a finish line a person can check>. **By:** <date, or "no date">
 - **Work is recorded in:** `docs/todo.md`
-- **Claim before starting:** `goal claim '<the entry's title>'`
+- **Claim before starting:** `goal claim '<the entry's title>'` as the work branch's first commit, with its pull request opened at once
 - **Work in progress:** at most <N> at once; defect fixes one at a time
 - **Defects first:** the Defects section is fixed, top first, before anything new
 ```
@@ -149,37 +149,47 @@ An optional `.claude/work.toml` sets format details:
 defects = ["Bugs"]                    # the defects heading(s)
 next = ["Security", "Next", "Later"]  # the sections taken after defects, in order
 skip = ["(owner)", "**Owned by**"]    # text marking an entry that isn't free
-merge_method = "squash"               # how claim and pr-skill pull requests merge: squash, rebase or merge
+merge_method = "squash"               # how pr-skill pull requests merge: squash, rebase or merge
 branch_prefix = "work/"               # the work branch is <prefix><slug of the title>
 ```
 
-### Claims live in the todo file
+### The work's pull request is the claim
 
-A claim marks the end of the entry's first line with who has it, merged to the default branch before the work
-starts.
-The entry still starts with its bold lead, so a repo's own checks of its entries read it as before:
+A claim is a mark at the end of the entry's first line saying who has it. The work's own branch commits it first,
+and the work's pull request, open from the start, carries it. The entry still starts with its bold lead, so a
+repo's own checks of its entries read it as before:
 
 ```markdown
 - **Add a snooze button.** Five more minutes. [claimed by session-1a2b3c4d on laptop, 2026-11-22]
 ```
 
-- `goal claim '<title>'` opens a pull request touching only that line, on a `claim/<slug>` branch, and arms
-  auto-merge. The repo's normal review rules and branch protection apply to it. The claim holds once it
-  merges.
-- **Git is the lock.** Two claims edit the same line, so once one merges the other conflicts and can't. A
-  second claim while the first is open is refused at once, since `claim/<slug>` already exists. Git also
-  treats edits on neighboring lines as a conflict, so a claim on the next entry can block yours: run
-  `goal claim` again, and it rebuilds your claim on the new main while the item is still free there, opening
-  a new pull request if the old one is gone.
-- **Release:** finishing the work deletes the entry in the work's own pull request; abandoning it runs
-  `goal release '<title>'`, which opens the pull request that removes the mark.
-- **Claims are read from origin.** A mark is only real once merged, so `goal` reads marks from origin's default
-  branch, found by asking GitHub (`gh repo view`), not from the local `origin/HEAD`, which can be stale. A mark
-  that exists only in your working copy is reported as not yet merged and is not counted. If GitHub can't be
-  reached, `goal` says claims weren't checked and answers from the local files.
-- **In progress** is the number of claim marks, so it is stated in one place.
-- **Stale:** a claim with no open pull request naming the item and no commit on a branch named for it for 3
-  days is flagged by `goal`. It is never removed by itself.
+- **Starting:** on the work's new branch, `goal claim '<title>'` commits the mark, touching only that line.
+  Push the branch and open the work's pull request at once, ready for review but with auto-merge not armed. No
+  separate pull request has to merge first, and the work starts right away.
+- **An item is in progress while an open pull request carries its mark.** `goal` asks GitHub for the open pull
+  requests into the default branch, as GitHub names it (`gh repo view`), not the local `origin/HEAD`, which
+  can be stale. It reads the todo file on each one's branch. The claim is that pull request's, named with
+  its number, its author and the mark's holder. work-finish deletes the entry in the same pull request, and the
+  claim holds until it merges.
+- **Merged:** the entry is gone from the default branch, so the item is too. **Closed without merging:** the
+  item is free again.
+- **The few seconds before the pull request opens:** run `standup claim '<title>'` first, if
+  [standup](https://github.com/kilotronic/standup-board) is installed. It is first come, first served, so a
+  second session gets a refusal and picks another item.
+- **Two pull requests marking one item:** `goal` names both. The earlier pull request holds the item, and the
+  later one should stop: it is told so, and its item is not its own.
+- **Releasing:** to drop the work, close its pull request (a mark on the default branch needs a merged
+  `goal release`, below). To go on under another item, run
+  `goal release '<title>'`, which commits the mark away on the branch, then `goal claim` on the other one.
+- A mark only in your working copy is not counted until its pull request opens. A mark on the default branch,
+  made before claims moved to pull requests, still holds (and holds first) until the work deletes its entry, or
+  its holder removes it; the owner can with `goal release '<title>' --holder <their label>`. It goes stale by
+  its date. A pull request from a fork never holds an item.
+- If GitHub can't be reached, `goal` says claims weren't checked and answers from the local files, taking
+  their marks as they are. `goal claim` refuses until GitHub answers.
+- **In progress** is the number of items claimed this way, so it is stated in one place.
+- **Stale:** a claim whose pull request has had no activity for 3 days is flagged by `goal`. It is never
+  removed by itself.
 
 Who you are comes from `--as`, else `$GOAL_AS`, else the Claude Code session, plus the machine's name
 (`$GOAL_MACHINE` overrides it). With none of these, every session of the login shares one name, so
@@ -196,7 +206,7 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `orient`        | What changed on main, `goal --list`, who else is working, open pull requests, one recommendation. Reads only                                 |
 | `next`          | Takes `goal`'s item and does it, start to merged, through `work-start` and `work-finish`                                                     |
-| `work-start`    | Proves the item is still open, claims it, makes the worktree and branch, posts the standup step, says what done means                        |
+| `work-start`    | Proves the item is still open, makes the branch, commits the claim mark and opens the work's pull request, says what done means |
 | `work-finish`   | Removes the entry in the work's pull request, files follow-ups, runs the gates; after merge, cleans up                                       |
 | `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default                                   |
 | `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                      |

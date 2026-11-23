@@ -58,9 +58,15 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
   session (a claim closed, a pull request merged, an entry gone); one advisory line.
 - **A reader for GitHub issues on a project board**, for repos that record work there instead of a todo file.
 - **A `report` skill**: progress against `goal`'s finish line, in plain words.
+- **Stop reading claim marks on the default branch.** They hold only so that claims made before claims moved
+  to pull requests survive the upgrade. Once none are left, drop them, their warning and `goal release
+--holder`, so open pull requests are the one place claims are read. `claims_from` in `--json` names the
+  default branch, where it now means the branch the pull requests merge into.
 - **Small gaps in goal found in review.** `gh repo view` follows gh's default repo, which in a fork clone can be the
-  upstream, not origin; a claimed entry whose title is edited locally reads as a mark not yet merged; The claims list ignores a custom branch prefix; the stale match finds
-  a short title ("CI") inside any pull request; `goal release` compares the holder's name, not the machine; on
+  upstream, not origin; a claimed entry whose title is edited locally reads as a mark no pull request carries;
+  claims are read from the first 200 open pull requests only; a branch that deleted a claimed entry is read back
+  only 20 commits; a pull request stacked on another work branch counts as a second claim on its item; on the
+  work branch after work-finish deletes the entry, `goal` no longer answers "finish" for it; `goal release` compares the holder's name, not the machine; on
   Python 3.9 and 3.10 a settings value with an apostrophe is refused; a heading inside a code block is read as
   a section, in the todo file and in the README (so this repo's own README example reads as its section); bytes that aren't UTF-8 elsewhere in the todo file are rewritten by a claim; a prose formatter or
   line-length rule can move or reject the mark at the end of a long line.
