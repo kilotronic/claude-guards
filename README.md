@@ -260,7 +260,7 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
   plugins run at the same time, so the first session after installing may list memories before the file is there.
   Nothing removes the file when the plugin is uninstalled; delete it by hand. The plugin's `hooks/hooks.json` adds
   this under `SessionStart` (it copies to a hidden name first, which the hook skips, so it never reads half a
-  file):
+  file; the name has the process number in it, so two sessions starting at once don't share a copy):
 
   ```json
   {
@@ -268,7 +268,8 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
     "hooks": [
       {
         "type": "command",
-        "command": "d=~/.config/claude-guards/memory-match && mkdir -p $d && cp \"${CLAUDE_PLUGIN_ROOT}/memory-match\" $d/.my-team.new && mv $d/.my-team.new $d/my-team"
+        "command": "d=\"$HOME/.config/claude-guards/memory-match\" && mkdir -p \"$d\" && cp \"${CLAUDE_PLUGIN_ROOT}/memory-match\" \"$d/.my-team.$$\" && mv \"$d/.my-team.$$\" \"$d/my-team\"",
+        "timeout": 10
       }
     ]
   }
