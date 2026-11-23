@@ -1,5 +1,5 @@
 {
-  "description": "Lets an agent run a plain gh pr merge in auto mode, never with --admin or --body-file; warns at gh pr merge when the pull request has no fresh-review comment",
+  "description": "Lets an agent run a plain gh pr merge in auto mode, never with --admin or --body-file; warns at gh pr merge when the pull request has no fresh-review comment; offers to share what Claude saves to memory with the team, and lists memories still waiting once a day",
   "hooks": {
     "PreToolUse": [
       {
@@ -14,6 +14,29 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/review-check.py\"",
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/memories.py\" sweep",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/memories.py\" after-write",
+            "timeout": 10
           }
         ]
       }
