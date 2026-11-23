@@ -259,8 +259,8 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
   plugin's file that doesn't compile is skipped, and when no line compiles the offers are off. Hooks of different
   plugins run at the same time, so the first session after installing may list memories before the file is there.
   Nothing removes the file when the plugin is uninstalled; delete it by hand. The plugin's `hooks/hooks.json` adds
-  this under `SessionStart` (it copies to a hidden name first, unique to the process so two sessions starting at once don't share a copy, which the hook skips, so it never reads half a
-  file):
+  this under `SessionStart` (it copies to a hidden name first, which the hook skips, so it never reads half a
+  file; the name has the process number in it, so two sessions starting at once don't share a copy):
 
   ```json
   {
