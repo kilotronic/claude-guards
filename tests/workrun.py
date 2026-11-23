@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -62,8 +63,8 @@ with open(os.path.join(d, "calls.log"), "a") as f:
 if os.path.exists(os.path.join(d, "fail")):
     sys.exit(1)
 args = sys.argv[1:]
-if args[:2] == ["pr", "merge"] and os.path.exists(os.path.join(d, "merge_fail")):
-    print("auto-merge is not allowed", file=sys.stderr)
+if args[:2] == ["pr", "list"] and os.path.exists(os.path.join(d, "pr_list_fail")):
+    print("could not list pull requests", file=sys.stderr)
     sys.exit(1)
 if args[:2] == ["repo", "view"]:
     path = os.path.join(d, "default_branch")
@@ -128,8 +129,58 @@ class Project:
     def prs(self, state: str, prs: list[dict]) -> None:
         (self.gh_dir / f"{state}.json").write_text(json.dumps(prs))
 
+    def open_claim(
+        self,
+        title: str,
+        who: str,
+        number: int,
+        updated: str = "2026-11-21",
+        machine: str = "box1",
+        then_delete: bool = False,
+        replace_mark: bool = False,
+    ) -> dict:
+        """Push a work branch whose first commit marks `title` as `who`'s, and list its open pull request #`number`,
+        last active on `updated`. With `then_delete`, a second commit deletes the entry, as work-finish does; with
+        `replace_mark`, the branch swaps a mark main already has for its own."""
+        name = f"work/{who}-{number}"
+        base = self.origin_file("docs/todo.md")
+        if replace_mark:
+            base = re.sub(r" \[claimed by [^\]]+\]", "", base)
+        tip = self.branch(
+            name, updated, {"docs/todo.md": claimed(base, title, who, updated, machine)}
+        )
+        if then_delete:
+            git(self.clone, "checkout", "-q", "-B", name, tip)
+            text = (self.clone / "docs" / "todo.md").read_text()
+            entry = next(
+                ln for ln in text.splitlines() if ln.startswith(f"- **{title}")
+            )
+            (self.clone / "docs" / "todo.md").write_text(text.replace(entry + "\n", ""))
+            git(self.clone, *IDENTITY, "commit", "-q", "-am", "feat: finish it")
+            git(self.clone, "push", "-q", "origin", f"HEAD:refs/heads/{name}")
+            tip = git(self.clone, "rev-parse", "HEAD").strip()
+            git(self.clone, "checkout", "-q", "--detach", "origin/main")
+        pr = {
+            "number": number,
+            "title": f"feat: {title.lower()}",
+            "headRefName": name,
+            "headRefOid": tip,
+            "isCrossRepository": False,
+            "author": {"login": f"{who}-login"},
+            "url": f"https://github.com/example/widgets/pull/{number}",
+            "updatedAt": f"{updated}T12:00:00Z",
+        }
+        path = self.gh_dir / "open.json"
+        listed = json.loads(path.read_text()) if path.exists() else []
+        self.prs("open", [*listed, pr])
+        return pr
+
     def gh_fails(self) -> None:
         (self.gh_dir / "fail").write_text("")
+
+    def pr_list_fails(self) -> None:
+        """GitHub answers which branch is the default but can't list pull requests."""
+        (self.gh_dir / "pr_list_fail").write_text("")
 
     def default_branch_is(self, name: str) -> None:
         """What `gh repo view` says GitHub's default branch is."""

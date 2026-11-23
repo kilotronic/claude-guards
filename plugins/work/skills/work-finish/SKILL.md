@@ -1,10 +1,10 @@
 ---
 name: work-finish
 description:
-  Finish one claimed todo item. In the work's own pull request, removes the entry (ending the claim), files
-  follow-ups as new entries and runs the repo's gates; after it shows MERGED, removes the worktree and branches
-  and posts the last standup step. Also abandons an item cleanly with goal release. Use for "finish this",
-  "land it", "wrap up", "abandon this item".
+  Finish one claimed todo item. In the work's own pull request, removes the entry (the claim ends when it
+  merges), files follow-ups as new entries, runs the repo's gates and arms auto-merge; after it shows MERGED,
+  removes the worktree and branches and posts the last standup step. Also abandons an item cleanly by closing
+  its pull request. Use for "finish this", "land it", "wrap up", "abandon this item".
 ---
 
 # Finish an item
@@ -12,13 +12,15 @@ description:
 ## 1. Before merge, in the work's own pull request
 
 - **Remove the entry from the todo file** in the last commit, citing the work by its commit subject (a squash
-  or rebase merge rewrites SHAs). Delete it; never tick it. Removing the entry removes its claim mark, so
-  the claim ends when this pull request merges. Keep any durable lesson in the repo's decisions doc first.
+  or rebase merge rewrites SHAs). Delete it; never tick it. The pull request still holds the claim while it
+  is open (`goal` reads the mark from the branch's earlier commit), and the item is gone once it merges. Keep
+  any durable lesson in the repo's decisions doc first.
 - **Follow-ups found on the way become new todo entries** in the same pull request, in the right section,
   with no claim mark.
 - **Run the repo's gates**: its formatters, linters and tests (its CLAUDE.md or Makefile), and the review its
   rules require. Fix the findings before merge.
-- Open the pull request (ready, not draft); the `pr` skill does it, with its fresh review. Arm auto-merge only once its head is your pushed commit
+- The pull request has been open, ready, since work-start. Finish it with the `pr` skill, with its fresh
+  review. Arm auto-merge only now, once its head is your pushed commit
   (`gh pr view --json headRefOid -q .headRefOid` equals `git rev-parse HEAD`), after `standup list`.
 
 ## 2. After merge
@@ -47,12 +49,22 @@ If standup is installed, post the last step, saying what is true:
 
 ## 3. If the work is abandoned instead
 
+Close the work's pull request: the item is free again as soon as no open pull request carries its mark.
+
 ```bash
-goal release '<the entry's title>'
+gh pr close <n>
 ```
 
-It opens the pull request that removes your claim mark, so the item is free again. Releasing someone else's
-stale claim is the owner's call: `goal release '<title>' --holder <their label>` once the owner says so.
+If the work goes on under another item instead, move the claim on the branch, and push:
+
+```bash
+goal release '<the old title>'    # commits the mark away
+goal claim '<the new title>'      # commits the new mark
+```
+
+An item held by a mark on the default branch, made before claims moved to pull requests, is freed only by a
+pull request that removes the mark: `goal release '<title>'` on a branch, pushed and merged. Closing someone
+else's stale pull request, or removing their mark (`--holder <their label>`), is the owner's call.
 
 Keep the worktree until its commits are safe: pushed to a branch on origin, or saved as a patch
 (`git format-patch origin/main --stdout > <file>`) and the path given to the person. Uncommitted changes are

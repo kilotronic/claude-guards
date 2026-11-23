@@ -10,8 +10,8 @@ description:
 
 Answer the session-start question in one pass, and end with one concrete recommendation, not a survey.
 The order of work is `goal`'s, not this skill's: `goal` reads the repo's README section
-`## How work runs here` and its todo file in the working copy (claim marks from
-origin's default branch), and answers.
+`## How work runs here` and its todo file in the working copy (claims from the open pull requests whose
+branches carry a claim mark), and answers.
 
 ## Steps
 
@@ -24,11 +24,13 @@ origin's default branch), and answers.
    ```
 
    It prints the goal, the next item with its reason, the in-progress count against the limit, any stale
-   claims, then every free item in order and every claim. Exit 2 means the repo doesn't say enough: relay
+   claims and any item two pull requests both claim, then every free item in order and every claim with its
+   pull request. Exit 2 means the repo doesn't say enough: relay
    what it names as missing and ask the owner those questions. Never pick an item yourself instead.
 
 3. **Who else is working.** `standup list`, if standup is installed: other sessions on this repo, their branches and pull requests.
-   A session working on the item `goal` names, without a claim mark, is a reason to coordinate first.
+   A session working on the item `goal` names, with no pull request open for it yet, is a reason to
+   coordinate first.
 4. **Open pull requests.** `gh pr list`. One of ours that isn't merged comes before new work: drive it to
    merged. A pull request about to change the code an item touches is worth naming.
 5. **Prove the top item is still open** before recommending it: todo lists lag reality.

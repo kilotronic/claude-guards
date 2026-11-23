@@ -1,9 +1,11 @@
 ---
 name: work-start
 description:
-  Start one todo item properly. Proves it is still open, claims it in the todo file with goal claim (merged
-  before any code), makes the worktree and branch off origin/main, posts the standup step, and restates what
-  done means. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the next skill.
+  Start one todo item properly. Proves it is still open, makes the worktree and branch off origin/main, commits
+  the claim mark with goal claim and opens the work's pull request at once (the open pull request is the
+  claim), checks again that no lower-numbered pull request marks the same item, posts the standup step, and
+  restates what done means. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the
+  next skill.
 ---
 
 # Start an item
@@ -25,31 +27,7 @@ goal merged <a related branch>                                                  
 If the fix already landed, don't claim: delete the entry in a small docs pull request, citing the fix, and go
 back to `goal`. That is a complete, reportable outcome.
 
-## 2. Claim it
-
-```bash
-goal claim '<the entry's title>'
-```
-
-It opens a pull request that only marks the entry's line in the todo file with who has it, and arms
-auto-merge with the repo's merge method. Branch protection and the repo's review rules apply to it as to any
-pull request. **The claim holds only once that pull request is merged**:
-
-```bash
-gh pr checks <n> --watch --interval 60
-gh pr view <n> --json state -q .state        # MERGED: the item is yours
-```
-
-- Exit 3 from `goal claim` means someone else took it (or it needs the owner). Say so, and go back to `goal`.
-- A claim pull request that conflicts: run `goal claim '<title>'` again. Git treats a claim on the
-  neighboring entry as a conflict too, so while the item is still free on main it rebuilds your claim there
-  (with a new pull request if the old one is gone);
-  exit 3 means someone else took it. Then close your claim pull request, delete its branch, and go back to
-  `goal`.
-- A `warning: auto-merge not armed` means the claim pull request merges only by hand, by the repo's rules.
-- `goal` now answers **finish** with this item: that is the check that the claim is yours.
-
-## 3. Worktree and branch
+## 2. Worktree and branch
 
 `goal --json` gives the branch name (`.next.item.branch`, `work/<slug>` by default). Always a worktree, never
 the main checkout, branched from the up-to-date `origin/main`:
@@ -57,6 +35,33 @@ the main checkout, branched from the up-to-date `origin/main`:
 ```bash
 git worktree add ../<repo>-<slug> -b <branch> origin/main
 ```
+
+## 3. Claim it: the work's pull request is the claim
+
+In the worktree, in this order:
+
+```bash
+goal claim '<the entry's title>'        # checks the open pull requests, then commits the mark as the first commit
+git push -u origin <branch>
+gh pr create --title '<type>: <the work, in the imperative>' --body '<what and why; the item it claims>'
+goal claim '<the entry's title>'        # again, now that the pull request is open: settles a tie
+```
+
+- **The first `goal claim` says `already yours`** for a mark already on the default branch: there is no mark
+  commit to push, so make the work's first commit before opening the pull request.
+- **The first `goal claim` exits 3**: an open pull request already marks the item (it names it), or the item
+  needs the owner. Remove the worktree and branch, and go back to `goal`.
+- **Open the pull request now**, ready (not draft), and **don't arm auto-merge**: work-finish does that
+  once the work is done. No CI or review has to pass before the work starts.
+- **The second `goal claim` settles a tie.** Two sessions can both pass the first check in the seconds before
+  either pull request opens. The lower pull request number wins. Exit 0 (`already yours`) means yours holds
+  the item. Exit 3 means another pull request marked it first: close yours with a comment naming the winner,
+  as the message gives it (`gh pr close <n> --comment 'Closing: #<winner> marked this item first.'`), remove
+  the worktree and branch, and go back to `goal` for another item. If the message gives no command, your
+  pull request isn't listed on GitHub yet: close it all the same. Exit 1 means `goal` couldn't check (GitHub
+  didn't answer, or another pull request's branch isn't fetched yet): run it again; don't start until it
+  exits 0.
+- `goal` now answers **finish** with this item and names your pull request.
 
 Then the repo's own set-up (its README or CLAUDE.md), in that worktree.
 
