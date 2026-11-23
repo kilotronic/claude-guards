@@ -1,10 +1,11 @@
 ---
 name: work-start
 description:
-  Start one todo item properly. Proves it is still open, makes the worktree and branch off origin/main, takes
-  it with standup claim, commits the claim mark with goal claim and opens the work's pull request at once (the
-  open pull request is the claim), posts the standup step, and restates what done means. Use for "start
-  <item>", "claim <item>", "pick up <item>", and at the end of the next skill.
+  Start one todo item properly. Proves it is still open, makes the worktree and branch off origin/main, commits
+  the claim mark with goal claim and opens the work's pull request at once (the open pull request is the
+  claim), checks again that no lower-numbered pull request marks the same item, posts the standup step, and
+  restates what done means. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the
+  next skill.
 ---
 
 # Start an item
@@ -40,22 +41,22 @@ git worktree add ../<repo>-<slug> -b <branch> origin/main
 In the worktree, in this order:
 
 ```bash
-standup claim '<the entry's title>'     # if standup is installed: first come, first served
-goal claim '<the entry's title>'        # commits the mark on the entry's line, the branch's first commit
+goal claim '<the entry's title>'        # checks the open pull requests, then commits the mark as the first commit
 git push -u origin <branch>
 gh pr create --title '<type>: <the work, in the imperative>' --body '<what and why; the item it claims>'
+goal claim '<the entry's title>'        # again, now that the pull request is open: settles a tie
 ```
 
-- **`standup claim` refuses**: another session is starting this item right now. Pick another item; don't
-  wait. It covers only the few seconds before the pull request exists: once that is open, the pull request is
-  the claim.
-- **`goal claim` exits 3**: an open pull request already holds the item (it names it), or the item needs the
-  owner. Remove the worktree and branch, and go back to `goal`.
+- **The first `goal claim` exits 3**: an open pull request already marks the item (it names it), or the item
+  needs the owner. Remove the worktree and branch, and go back to `goal`.
 - **Open the pull request now**, ready (not draft), and **don't arm auto-merge**: work-finish does that
   once the work is done. No CI or review has to pass before the work starts.
-- `goal` now answers **finish** with this item and names your pull request: that is the check that the claim
-  is yours. If it instead warns that **you hold the later claim**, another pull request marked the item first:
-  stop, close yours, and go back to `goal`.
+- **The second `goal claim` settles a tie.** Two sessions can both pass the first check in the seconds before
+  either pull request opens. The lower pull request number wins. Exit 0 (`already yours`) means yours holds
+  the item. Exit 3 means another pull request marked it first: close yours with a comment naming the winner,
+  as the message gives it (`gh pr close <n> --comment 'Closing: #<winner> marked this item first.'`), remove
+  the worktree and branch, and go back to `goal` for another item.
+- `goal` now answers **finish** with this item and names your pull request.
 
 Then the repo's own set-up (its README or CLAUDE.md), in that worktree.
 
@@ -64,7 +65,7 @@ Then the repo's own set-up (its README or CLAUDE.md), in that worktree.
 If standup is installed, from the worktree, so the branch is detected:
 
 ```bash
-standup status --goal '<the session goal>' --step 'started: <title>, #<n>'
+standup status --goal '<the session goal>' --step 'started: <title>'
 ```
 
 A subagent posts its own child row with `--as-subagent '<label>'` instead.

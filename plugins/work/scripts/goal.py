@@ -1146,6 +1146,28 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
             "warnings": repo.warnings,
         }
     if held:
+        # Ties are settled on GitHub: the first holder wins (a mark on the default branch, else the lowest pull
+        # request number), and a later pull request of ours closes itself.
+        ours = next(
+            (
+                c
+                for title, holders in state.conflicts
+                if title == entry.title
+                for c in holders[1:]
+                if (c.who, c.machine) == (me.who, me.machine)
+            ),
+            None,
+        )
+        if ours:
+            why = (
+                f"#{held.pr} marked this item first"
+                if held.pr
+                else "this item was already claimed on the default branch"
+            )
+            raise Refused(
+                f'"{entry.title}" is held by {held.holder()}, which came first: close your #{ours.pr} and pick'
+                f" another item (gh pr close {ours.pr} --comment 'Closing: {why}.')"
+            )
         raise Refused(f'"{entry.title}" is held by {held.holder()}: pick another item')
     owner = [m for m in state.settings.skip if m in entry.text]
     if owner:

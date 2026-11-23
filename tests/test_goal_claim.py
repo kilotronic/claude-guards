@@ -82,6 +82,34 @@ def test_your_own_open_pull_request_is_already_yours(tmp_path: Path) -> None:
     assert "already yours" in out and "#7" in out
 
 
+def test_after_opening_a_later_pull_request_the_claim_says_to_close_it(
+    tmp_path: Path,
+) -> None:
+    """The tie rule: another pull request marked the item first, so ours, the higher number, closes itself."""
+    p = make_project(tmp_path)
+    p.open_claim("Add a snooze button", "agent-b", 7)
+    p.open_claim("Add a snooze button", "agent-a", 9)
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
+    assert rc == 3
+    assert "#7" in out + err
+    assert "gh pr close 9 --comment 'Closing: #7 marked this item first.'" in out + err
+
+
+def test_after_opening_the_lower_pull_request_the_claim_holds(tmp_path: Path) -> None:
+    """The same tie the other way round: ours is the lower number, so it holds, and the other closes itself."""
+    p = make_project(tmp_path)
+    p.open_claim("Add a snooze button", "agent-a", 7)
+    p.open_claim("Add a snooze button", "agent-b", 9)
+    wt = work_tree(p, tmp_path)
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=wt)
+    assert rc == 0, err
+    assert "already yours" in out and "#7" in out
+    rc, out, err = p.run("claim", "Add a snooze button", who="agent-b", cwd=wt)
+    assert rc == 3
+    assert "gh pr close 9" in out + err
+
+
 def test_claiming_twice_on_the_branch_commits_once(tmp_path: Path) -> None:
     p = make_project(tmp_path)
     wt = work_tree(p, tmp_path)

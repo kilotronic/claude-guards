@@ -21,7 +21,7 @@ description:
   rules require. Fix the findings before merge.
 - The pull request has been open, ready, since work-start. Finish it with the `pr` skill, with its fresh
   review. Arm auto-merge only now, once its head is your pushed commit (`gh pr view --json headRefOid -q
-  .headRefOid` equals `git rev-parse HEAD`), after `standup list`.
+.headRefOid` equals `git rev-parse HEAD`), after `standup list`.
 
 ## 2. After merge
 

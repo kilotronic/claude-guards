@@ -173,11 +173,11 @@ repo's own checks of its entries read it as before:
   claim holds until it merges.
 - **Merged:** the entry is gone from the default branch, so the item is too. **Closed without merging:** the
   item is free again.
-- **The few seconds before the pull request opens:** run `standup claim '<title>'` first, if
-  [standup](https://github.com/kilotronic/standup-board) is installed. It is first come, first served, so a
-  second session gets a refusal and picks another item.
-- **Two pull requests marking one item:** `goal` names both. The earlier pull request holds the item, and the
-  later one should stop: it is told so, and its item is not its own.
+- **Ties are settled on GitHub.** `goal claim` refuses an item an open pull request already marks. Two
+  sessions can still both pass that check in the seconds before either pull request opens, so work-start runs
+  `goal claim` again once its pull request is open. The lower pull request number wins: the higher one gets
+  exit 3 naming the winner, and closes itself with a comment pointing at it. `goal` names both pull requests
+  while both are open, and tells the later one to stop.
 - **Releasing:** to drop the work, close its pull request (a mark on the default branch needs a merged
   `goal release`, below). To go on under another item, run
   `goal release '<title>'`, which commits the mark away on the branch, then `goal claim` on the other one.
@@ -206,7 +206,7 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `orient`        | What changed on main, `goal --list`, who else is working, open pull requests, one recommendation. Reads only                                 |
 | `next`          | Takes `goal`'s item and does it, start to merged, through `work-start` and `work-finish`                                                     |
-| `work-start`    | Proves the item is still open, makes the branch, commits the claim mark and opens the work's pull request, says what done means |
+| `work-start`    | Proves the item is still open, makes the branch, commits the claim mark and opens the work's pull request, says what done means              |
 | `work-finish`   | Removes the entry in the work's pull request, files follow-ups, runs the gates; after merge, cleans up                                       |
 | `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default                                   |
 | `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                      |
