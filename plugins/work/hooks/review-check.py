@@ -48,8 +48,12 @@ PUNCTUATION = ";&|()"
 # A redirection and its target (`2>&1`, `> out`, `2>/dev/null`): not an argument of the command.
 REDIRECTION = re.compile(r"\d*(?:>>|>&|<&|>|<)\s*[^\s;&|()]+")
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+# A redirection whose target is quoted: the operator ends the unquoted text before the quote.
+REDIRECTION_BEFORE_QUOTE = re.compile(r"\d*(?:>>|>&|<&|>|<)\s*$")
 # A quoted string, left as it is when redirections are taken out.
 QUOTED = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
+# A `cd` to a folder only the shell knows (`cd "$WT"`, `cd $(...)`): which repo gh merges in is unknown.
+UNKNOWN = "<unknown folder>"
 # Words that start a command without changing it.
 WRAPPERS = {"env", "command"}
 
@@ -62,23 +66,37 @@ def merges(command: str, cwd: str | None) -> list[tuple[list[str], str | None]]:
     text = command.replace("\\\n", " ").replace("\n", " ; ")
     parts = QUOTED.split(text)
     quoted = QUOTED.findall(text) + [""]
-    text = "".join(
-        REDIRECTION.sub(" ", part) + quote for part, quote in zip(parts, quoted)
-    )
+    pieces = []
+    for part, quote in zip(parts, quoted):
+        part = REDIRECTION.sub(" ", part)
+        if quote and REDIRECTION_BEFORE_QUOTE.search(part):
+            part, quote = REDIRECTION_BEFORE_QUOTE.sub(" ", part), " "
+        pieces.append(part + quote)
+    text = "".join(pieces)
     try:
         lexer = shlex.shlex(text, posix=True, punctuation_chars=PUNCTUATION)
         lexer.whitespace_split = True
         words = list(lexer)
     except ValueError:
         return []
-    segments: list[list[str]] = [[]]
+    # Each command's words, and the subshell brackets between them: a `cd` inside `( )` ends with it.
+    items: list[list[str] | str] = [[]]
     for word in words:
         if word and set(word) <= set(PUNCTUATION):
-            segments.append([])
+            items.extend(c for c in word if c in "()")
+            items.append([])
         else:
-            segments[-1].append(word)
+            items[-1].append(word)  # type: ignore[union-attr]
     found = []
-    for segment in segments:
+    outer: list[str | None] = []
+    for segment in items:
+        if segment == "(":
+            outer.append(cwd)
+            continue
+        if segment == ")":
+            cwd = outer.pop() if outer else cwd
+            continue
+        assert isinstance(segment, list)
         env_repo: list[str] = []
         while segment and (segment[0] in WRAPPERS or ASSIGNMENT.match(segment[0])):
             if segment[0].startswith("GH_REPO="):
@@ -95,7 +113,9 @@ def merges(command: str, cwd: str | None) -> list[tuple[list[str], str | None]]:
             segment = segment[1:]
         if segment[:1] == ["cd"] and len(segment) > 1:
             where = os.path.expanduser(segment[1])
-            if os.path.isabs(where):
+            if "$" in where or "`" in where or cwd == UNKNOWN:
+                cwd = UNKNOWN
+            elif os.path.isabs(where):
                 cwd = os.path.normpath(where)
             elif cwd:
                 cwd = os.path.normpath(os.path.join(cwd, where))
@@ -174,23 +194,37 @@ def decide(
     if not found:
         return None
     start = clock()
-    unchecked, unreviewed = [], []
+    unchecked, unreviewed, unknown = [], [], []
     for selector, cwd in found:
+        if cwd == UNKNOWN:
+            if "--repo" not in selector:
+                unknown.append(describe(selector))
+                continue
+            cwd = None
         left = BUDGET - (clock() - start)
         pr = fetch(selector, cwd, min(GH_TIMEOUT, left)) if left > 0 else None
         if pr is None:
             unchecked.append(describe(selector))
         elif not has_review(pr):
             unreviewed.append(describe(selector))
-    lines = [
-        f"work: could not check pull request {name} for a fresh-review comment (GitHub did not answer). "
-        "Make sure the `work:pr` skill's step 5 ran: a fresh reviewer agent posted its findings as a comment."
-        for name in unchecked
-    ] + [
-        f"work: pull request {name} has no fresh-review comment (one starting with the agent line). "
-        "Run the `work:pr` skill's step 5 first: a fresh reviewer agent reviews it and posts its findings as a comment."
-        for name in unreviewed
-    ]
+    lines = (
+        [
+            f"work: could not check pull request {name} for a fresh-review comment (GitHub did not answer). "
+            "Make sure the `work:pr` skill's step 5 ran: a fresh reviewer agent posted its findings as a comment."
+            for name in unchecked
+        ]
+        + [
+            f"work: could not check pull request {name} for a fresh-review comment: it merges after a `cd` to a "
+            "folder only the shell knows. Make sure the `work:pr` skill's step 5 ran: a fresh reviewer agent posted "
+            "its findings as a comment."
+            for name in unknown
+        ]
+        + [
+            f"work: pull request {name} has no fresh-review comment (one starting with the agent line). "
+            "Run the `work:pr` skill's step 5 first: a fresh reviewer agent reviews it and posts its findings as a comment."
+            for name in unreviewed
+        ]
+    )
     if not lines:
         return None
     text = "\n".join(lines)

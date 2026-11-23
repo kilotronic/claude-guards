@@ -195,10 +195,34 @@ class ReviewCheck(unittest.TestCase):
             ("command gh pr merge 12", ["12"], "/repo"),
             ("env -u X -i gh pr merge 12", ["12"], "/repo"),
             ("gh pr merge \\\n  12 --squash", ["12"], "/repo"),
+            # A cd inside a subshell ends with it.
+            ("(cd /a && echo hi); gh pr merge 5", ["5"], "/repo"),
+            ("(cd /a); cd b && gh pr merge 5", ["5"], "/repo/b"),
+            # A quoted redirection target is not the pull request.
+            ('gh pr merge --auto --squash > "merge.log"', [], "/repo"),
+            ("gh pr merge 7 2> 'err log'", ["7"], "/repo"),
         ):
             fetch = Fetch(pr())
             warning(review_check.decide(bash(command), fetch))
             self.assertEqual(fetch.calls, [(selector, cwd)], command)
+
+    def test_a_cd_to_a_folder_only_the_shell_knows_is_not_looked_up(self):
+        # `cd "$WT"`: the hook can't know the folder, so it can't tell which repo gh would merge in.
+        for command in (
+            'cd "$WT" && gh pr merge --auto',
+            "cd $(git rev-parse --show-toplevel) && gh pr merge 5",
+        ):
+            fetch = Fetch(pr(REVIEW))
+            text = warning(review_check.decide(bash(command), fetch))
+            self.assertEqual(fetch.calls, [], command)
+            self.assertIn("could not check", text.lower())
+            self.assertIn("folder", text)
+        # With --repo the folder doesn't matter, so it is still checked.
+        fetch = Fetch(pr(REVIEW))
+        self.assertIsNone(
+            review_check.decide(bash('cd "$WT" && gh pr merge 5 -R o/r'), fetch)
+        )
+        self.assertEqual(fetch.calls, [(["5", "--repo", "o/r"], None)])
 
     def test_every_merge_in_one_command_is_checked(self):
         answers = {"1": pr(REVIEW), "2": pr()}
