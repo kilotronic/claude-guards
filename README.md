@@ -253,6 +253,14 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
   marks it personal; `shared: <pull request URL>` records that it was sent. Set `$WORK_MEMORY_MATCH` (a regular
   expression, case ignored, for example your team's repo names) to offer only memories whose folder name or text
   matches; unset, every project memory is offered.
+- **Work stopped by a usage limit is parked on its pull request** (`scripts/park.py`). When a session stops on a
+  usage limit, the hook commits what is uncommitted on the work's branch as `wip: parked at a usage limit`
+  (without the commit hooks, which can't run there), pushes it, adds the `parked` label to the branch's pull
+  request and comments with the machine, the session id and the reason. Nothing happens on the default branch,
+  and a branch with no pull request is only pushed. At start-up, a session lists the repo's open pull requests
+  labeled `parked`. `park resume <n>` takes the label off, so the work is yours, and says how to check out its
+  branch; on the same machine, `claude --resume <session id>` from the comment continues the session itself.
+  Taking a label off is not atomic, so two sessions can rarely both take the same work.
 
 ## Development
 

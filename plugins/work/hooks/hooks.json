@@ -1,5 +1,5 @@
 {
-  "description": "Lets an agent run a plain gh pr merge in auto mode, never with --admin or --body-file; warns at gh pr merge when the pull request has no fresh-review comment; offers to share what Claude saves to memory with the team, and lists memories still waiting once a day",
+  "description": "Lets an agent run a plain gh pr merge in auto mode, never with --admin or --body-file; warns at gh pr merge when the pull request has no fresh-review comment; offers to share what Claude saves to memory with the team, and lists memories still waiting once a day; parks work at a usage limit on its pull request (label parked) and lists parked work at start-up",
   "hooks": {
     "PreToolUse": [
       {
@@ -26,6 +26,11 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/memories.py\" sweep",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/park.py\" notice",
+            "timeout": 10
           }
         ]
       }
@@ -38,6 +43,18 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/memories.py\" after-write",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "rate_limit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/park.py\" hook",
+            "timeout": 60
           }
         ]
       }
