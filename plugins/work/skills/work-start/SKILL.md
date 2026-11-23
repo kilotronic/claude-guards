@@ -96,11 +96,17 @@ For `issues`, **use the repo's own issue-tracking skill or rules first**: if the
 issues, or rules for them in its README or CLAUDE.md, follow those to find, claim, update and finish the work,
 and use the steps below only where they say nothing. With none, the minimal steps with `gh`:
 
-- **Find:** `gh issue list --state open --search 'no:assignee'`. Defects (a `bug` label) come first, then the
-  rest, oldest first, unless the repo states another order. Prove it is still open as in step 1.
-- **Claim:** `gh issue edit <n> --add-assignee @me`, then make the worktree and branch as in step 2, push,
-  and open the work's pull request at once with `Closes #<n>` in its body. An issue someone else is assigned
-  to, or that an open pull request already names, is theirs: pick another.
+- **Find:** first your own open pull requests (`gh pr list --author @me`): finish one before starting another.
+  Else the free issues, `gh issue list --state open --search 'no:assignee sort:created-asc' --limit 200`:
+  defects (a `bug` label) first, then the rest, oldest first, unless the repo states another order. Prove it
+  is still open as in step 1.
+- **Claim:** the work's open pull request is the claim, as with a todo file; the assignee only shows it on
+  the issue. Make the worktree and branch as in step 2, make the first commit, push, open the work's pull
+  request at once with `Closes #<n>` in its body, and `gh issue edit <n> --add-assignee @me`. An issue someone
+  else is assigned to, or that another open pull request already names, is theirs: pick another.
+- **Settle a tie:** every session of one person is the same `@me`, so once yours is open, look again:
+  `gh pr list --state open --search '<n> in:body'`. Another open pull request naming the issue with a lower
+  number holds it: close yours with a comment naming it, and go back to Find.
 - **Finish:** work-finish as written, minus the todo entry. The pull request's `Closes #<n>` closes the issue
   when it merges. Follow-ups found on the way become new issues (`gh issue create`), named in the pull
   request.

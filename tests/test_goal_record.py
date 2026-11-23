@@ -73,3 +73,43 @@ def test_claim_in_an_issues_repo_points_at_the_issues(tmp_path: Path) -> None:
     assert rc == 2
     assert "GitHub issues" in out + err
     assert "frozen" not in out + err
+
+
+def test_a_past_due_milestone_is_unclear_in_an_issues_repo(tmp_path: Path) -> None:
+    readme = issues_readme("GitHub issues").replace(
+        "**By:** no date", "**By:** 2020-01-01"
+    )
+    p = make_project(tmp_path, readme=readme, todo=None)
+    rc, out = p.json()
+    assert rc == 2
+    assert any("2020-01-01" in m for m in out["missing"])
+
+
+def test_an_issues_repo_needs_no_milestone_or_limit(tmp_path: Path) -> None:
+    readme = "## How work runs here\n\n- **Work is recorded in:** GitHub issues\n"
+    p = make_project(tmp_path, readme=readme, todo=None)
+    rc, out = p.json()
+    assert rc == 0, out
+    assert out["record"] == "issues"
+    rc, text, _ = p.run()
+    assert "goal: see None" not in text
+
+
+def test_a_todo_file_beside_a_link_to_issues_stays_the_record(tmp_path: Path) -> None:
+    where = "`docs/todo.md` (bugs come in as [GitHub issues](https://github.com/example/widgets/issues))"
+    p = make_project(
+        tmp_path,
+        readme=README.replace(TODO_LINE, f"- **Work is recorded in:** {where}"),
+    )
+    rc, out = p.json()
+    assert rc == 0, out
+    assert out["record"] == "todo"
+
+
+def test_a_label_in_backticks_is_not_a_todo_file(tmp_path: Path) -> None:
+    p = make_project(
+        tmp_path, readme=issues_readme("GitHub issues labeled `agent-ready`"), todo=None
+    )
+    rc, out = p.json()
+    assert rc == 0, out
+    assert out["record"] == "issues"

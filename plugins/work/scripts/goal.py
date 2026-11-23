@@ -206,18 +206,27 @@ def _path_in(value: str) -> str | None:
     return m.group(1) if m else None
 
 
+ISSUES_WORDS = re.compile(r"\bgithub issues?\b", re.IGNORECASE)
+
+
 def todo_path(facts: dict[str, str]) -> str | None:
+    """The todo file the **Work is recorded in:** line names: its first link or backticked path that is not a web
+    address. On a line that also names GitHub issues, only a path with a `/` or `.` counts, so a quoted label
+    or a link to the issues is not taken for a file."""
     value = facts.get("work is recorded in")
-    path = _path_in(value) if value else None
-    return path if path and "://" not in path else None
+    if not value:
+        return None
+    found = re.findall(r"\]\(([^)\s#]+)|`([^`\s]+)`", value)
+    paths = [a or b for a, b in found if "://" not in (a or b)]
+    if ISSUES_WORDS.search(value):
+        paths = [x for x in paths if "/" in x or "." in x]
+    return paths[0] if paths else None
 
 
 def in_issues(facts: dict[str, str]) -> bool:
     """The **Work is recorded in:** line names GitHub issues and no todo file."""
     value = facts.get("work is recorded in") or ""
-    return todo_path(facts) is None and bool(
-        re.search(r"\bgithub issues?\b", value, re.IGNORECASE)
-    )
+    return todo_path(facts) is None and bool(ISSUES_WORDS.search(value))
 
 
 def goals_path(facts: dict[str, str]) -> str | None:
@@ -1010,13 +1019,15 @@ def load(
         "by": facts.get("by"),
         "goals_file": goals_path(facts),
     }
-    if in_issues(facts):
-        # The repo keeps its work in GitHub issues: goal has no list to read, and says so.
-        goal_info["recorded_in"] = facts["work is recorded in"]
-        return None, goal_info, []
     # Claiming and releasing need only the todo file and the settings, so an overdue milestone never stops an
     # agent from dropping its claim.
-    if need_goal and not goal_info["milestone"] and not goal_info["goals_file"]:
+    issues = in_issues(facts)
+    if (
+        need_goal
+        and not issues
+        and not goal_info["milestone"]
+        and not goal_info["goals_file"]
+    ):
         missing.append(
             "no milestone stated: add **Current milestone:** with **Done when:**, or **Goals:** linking the file"
             " that states it"
@@ -1029,6 +1040,13 @@ def load(
         missing.append(
             f"{goal_info['milestone'] or 'the milestone'} was due {by}: is it still the milestone, with a new date?"
         )
+    if issues:
+        # The repo keeps its work in GitHub issues: goal has no list or limit to read, and says so. A milestone it
+        # states is still checked.
+        if missing:
+            return None, goal_info, missing
+        goal_info["recorded_in"] = facts["work is recorded in"]
+        return None, goal_info, []
     path = todo_path(facts)
     if path is None:
         missing.append(
