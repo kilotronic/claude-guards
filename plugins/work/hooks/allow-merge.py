@@ -67,11 +67,7 @@ def decide(event: dict) -> dict | None:
 def main() -> None:
     try:
         answer = decide(json.load(sys.stdin))
-    except (
-        ValueError,
-        AttributeError,
-        TypeError,
-    ):  # bad input: never fail the tool call
+    except Exception:  # noqa: BLE001 - bad input (even nesting deep enough to recurse) never fails the call
         return
     if answer:
         print(json.dumps(answer))

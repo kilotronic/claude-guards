@@ -184,3 +184,8 @@ def _python39() -> str | None:
             if done.stdout.strip() == "True":
                 return path
     return None
+
+
+def test_deeply_nested_input_never_fails_the_call() -> None:
+    done = _run("[" * 100_000 + "]" * 100_000)
+    assert (done.returncode, done.stdout) == (0, ""), done.stderr[-300:]
