@@ -3,9 +3,11 @@
 
 """Let agents merge pull requests: a PreToolUse hook that allows a Bash call that is only `gh pr merge …`.
 
-Claude Code's auto mode blocks `gh pr merge` as a destructive action even after the person said yes. This hook
-answers "allow" for that one command, so the person's go-ahead is enough. It does not decide whether a merge is
-wanted: the repo's rules still say when to ask first (for example, when a merge deploys).
+Claude Code's auto mode blocks `gh pr merge` as a destructive action even after the person said yes. In auto
+mode only, this hook answers "allow" for that one command, so an agent told to merge can. It can't see whether
+the person said yes, and it does not decide whether a merge is wanted: the repo's written rules still say when
+to ask first (for example, when a merge deploys). In every other mode it says nothing, so the usual permission
+prompt asks the person.
 
 Allowed only when the whole command is `gh pr merge` with its own arguments: no `;`, `&&`, `|`, redirection,
 `$(…)`, backticks or newlines, so nothing else can ride along. Never for `--admin` (it merges past required
@@ -47,7 +49,8 @@ def is_plain_merge(command: str) -> bool:
 
 
 def decide(event: dict) -> dict | None:
-    if event.get("tool_name") != "Bash":
+    # Outside auto mode the permission prompt is the person's go-ahead: an allow here would skip it.
+    if event.get("tool_name") != "Bash" or event.get("permission_mode") != "auto":
         return None
     command = (event.get("tool_input") or {}).get("command") or ""
     if not is_plain_merge(command):

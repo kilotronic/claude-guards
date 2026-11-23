@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -21,8 +22,11 @@ allow_merge = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(allow_merge)
 
 
-def bash(command: str) -> dict:
-    return {"tool_name": "Bash", "tool_input": {"command": command}}
+def bash(command: str, mode: str | None = "auto") -> dict:
+    event = {"tool_name": "Bash", "tool_input": {"command": command}}
+    if mode is not None:
+        event["permission_mode"] = mode
+    return event
 
 
 @pytest.mark.parametrize(
@@ -96,6 +100,14 @@ def test_admin_merges_and_body_files_are_left_to_the_normal_check(
     assert allow_merge.decide(bash(command)) is None
 
 
+@pytest.mark.parametrize(
+    "mode", ["default", "acceptEdits", "plan", "bypassPermissions", "", None]
+)
+def test_outside_auto_mode_the_person_is_asked_as_usual(mode: str | None) -> None:
+    # Outside auto mode the permission prompt is the person's go-ahead; an allow here would skip it.
+    assert allow_merge.decide(bash("gh pr merge 3 --squash", mode)) is None
+
+
 def test_other_tools_are_ignored() -> None:
     event = {"tool_name": "Write", "tool_input": {"command": "gh pr merge 1"}}
     assert allow_merge.decide(event) is None
@@ -141,5 +153,34 @@ def test_as_claude_code_runs_it_bad_input_and_other_commands_say_nothing() -> No
         assert (done.returncode, done.stdout) == (0, ""), stdin
 
 
-def test_it_loads_under_the_oldest_python_the_hooks_support() -> None:
+def test_it_answers_under_the_oldest_python_the_hooks_support() -> None:
     assert "from __future__ import annotations" in SCRIPT.read_text()
+    python = _python39()
+    if python is None:
+        pytest.skip("no Python 3.9 on this machine; the annotations check covers it")
+    done = subprocess.run(
+        [python, str(SCRIPT)],
+        input=json.dumps(bash("gh pr merge 3")),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout)["hookSpecificOutput"]["permissionDecision"] == (
+        "allow"
+    )
+
+
+def _python39() -> str | None:
+    for name in ("python3.9", "/usr/bin/python3"):
+        path = shutil.which(name)
+        if path:
+            done = subprocess.run(
+                [path, "-c", "import sys; print(sys.version_info[:2] == (3, 9))"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if done.stdout.strip() == "True":
+                return path
+    return None
