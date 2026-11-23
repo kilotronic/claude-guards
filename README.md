@@ -5,8 +5,9 @@ Two [Claude Code](https://code.claude.com) plugins for agents working in a repos
 - **guards**: hooks that stop risky git, GitHub and shell commands before an agent runs them. Each refusal says
   why and what to do instead, so the agent can fix its own command and carry on.
 - **work**: the `goal` command, which answers "what should I work on next?" from what the repo states in
-  writing, the skills that claim an item, build it and land it, hooks around merging, and a hook that
-  offers to share what Claude saves to memory. See [The work plugin](#the-work-plugin).
+  writing; the skills that claim an item, build it and land it (`pr` opens the pull request and has a fresh
+  agent review it); `long-loops` and `add-knowledge`; hooks around merging; and a hook that offers to share what
+  Claude saves to memory. See [The work plugin](#the-work-plugin).
 
 The guards were written for several agents working in one repository at once, each in its own git worktree.
 They suit a single agent too. Note that a plain clone is its own main checkout, so the main-checkout guards
