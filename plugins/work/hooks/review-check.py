@@ -50,10 +50,15 @@ REDIRECTION = re.compile(r"\d*(?:>>|>&|<&|>|<)\s*[^\s;&|()]+")
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 # A redirection whose target is quoted: the operator ends the unquoted text before the quote.
 REDIRECTION_BEFORE_QUOTE = re.compile(r"\d*(?:>>|>&|<&|>|<)\s*$")
+# A `#` that starts a word, to the end of its line: a comment. In text that follows a quote, only after a space.
+COMMENT = re.compile(r"(?:(?<=[\s;&|()])|\A)#[^\n]*")
+COMMENT_AFTER_QUOTE = re.compile(r"(?<=[\s;&|()])#[^\n]*")
 # A quoted string, left as it is when redirections are taken out.
 QUOTED = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
 # A `cd` to a folder only the shell knows (`cd "$WT"`, `cd $(...)`): which repo gh merges in is unknown.
 UNKNOWN = "<unknown folder>"
+# A pull request named by `$N` or `$(...)`: only the shell knows which.
+UNKNOWN_PR = "<unknown pull request>"
 # Words that start a command without changing it.
 WRAPPERS = {"env", "command"}
 
@@ -63,12 +68,15 @@ Fetch = Callable[[list[str], "str | None", float], "dict | None"]
 def merges(command: str, cwd: str | None) -> list[tuple[list[str], str | None]]:
     """Each `gh pr merge` in the command: the `gh pr view` arguments naming the same pull request, and the
     directory it runs in (after any `cd` before it)."""
-    text = command.replace("\\\n", " ").replace("\n", " ; ")
+    text = command.replace("\\\n", " ")
     parts = QUOTED.split(text)
     quoted = QUOTED.findall(text) + [""]
     pieces = []
-    for part, quote in zip(parts, quoted):
-        part = REDIRECTION.sub(" ", part)
+    for i, part in enumerate(parts):
+        quote = quoted[i]
+        # A comment runs to the end of its line, and a line ends a command; neither inside quotes.
+        part = (COMMENT if i == 0 else COMMENT_AFTER_QUOTE).sub("", part)
+        part = REDIRECTION.sub(" ", part.replace("\n", " ; "))
         if quote and REDIRECTION_BEFORE_QUOTE.search(part):
             part, quote = REDIRECTION_BEFORE_QUOTE.sub(" ", part), " "
         pieces.append(part + quote)
@@ -76,6 +84,7 @@ def merges(command: str, cwd: str | None) -> list[tuple[list[str], str | None]]:
     try:
         lexer = shlex.shlex(text, posix=True, punctuation_chars=PUNCTUATION)
         lexer.whitespace_split = True
+        lexer.commenters = ""
         words = list(lexer)
     except ValueError:
         return []
@@ -113,11 +122,11 @@ def merges(command: str, cwd: str | None) -> list[tuple[list[str], str | None]]:
             segment = segment[1:]
         if segment[:1] == ["cd"] and len(segment) > 1:
             where = os.path.expanduser(segment[1])
-            if "$" in where or "`" in where or cwd == UNKNOWN:
+            if "$" in where or "`" in where:
                 cwd = UNKNOWN
             elif os.path.isabs(where):
                 cwd = os.path.normpath(where)
-            elif cwd:
+            elif cwd and cwd != UNKNOWN:
                 cwd = os.path.normpath(os.path.join(cwd, where))
             continue
         if not segment or os.path.basename(segment[0]) != "gh":
@@ -139,6 +148,9 @@ def merges(command: str, cwd: str | None) -> list[tuple[list[str], str | None]]:
                     next(args, None)
             elif not word.startswith("-") and not target:
                 target = [word]
+        if target and ("$" in target[0] or "`" in target[0]):
+            found.append((target + repo, UNKNOWN_PR))
+            continue
         found.append((target + repo, cwd))
     return found
 
@@ -196,6 +208,9 @@ def decide(
     start = clock()
     unchecked, unreviewed, unknown = [], [], []
     for selector, cwd in found:
+        if cwd == UNKNOWN_PR:
+            unknown.append(describe(selector))
+            continue
         if cwd == UNKNOWN:
             if "--repo" not in selector:
                 unknown.append(describe(selector))
@@ -214,8 +229,8 @@ def decide(
             for name in unchecked
         ]
         + [
-            f"work: could not check pull request {name} for a fresh-review comment: it merges after a `cd` to a "
-            "folder only the shell knows. Make sure the `work:pr` skill's step 5 ran: a fresh reviewer agent posted "
+            f"work: could not check pull request {name} for a fresh-review comment: only the shell knows its "
+            "folder or number. Make sure the `work:pr` skill's step 5 ran: a fresh reviewer agent posted "
             "its findings as a comment."
             for name in unknown
         ]

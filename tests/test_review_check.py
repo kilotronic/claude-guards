@@ -198,6 +198,13 @@ class ReviewCheck(unittest.TestCase):
             # A cd inside a subshell ends with it.
             ("(cd /a && echo hi); gh pr merge 5", ["5"], "/repo"),
             ("(cd /a); cd b && gh pr merge 5", ["5"], "/repo/b"),
+            # A comment ends at its line; a `#` inside a word is not a comment.
+            ("# merge it\ngh pr merge 5", ["5"], "/repo"),
+            ("git push # done\ngh pr merge 5", ["5"], "/repo"),
+            ("echo a#b; gh pr merge 5", ["5"], "/repo"),
+            ("gh pr merge 5 # the fix", ["5"], "/repo"),
+            # A full path after a folder only the shell knows is known again.
+            ('cd "$WT"; cd /b && gh pr merge 5', ["5"], "/b"),
             # A quoted redirection target is not the pull request.
             ('gh pr merge --auto --squash > "merge.log"', [], "/repo"),
             ("gh pr merge 7 2> 'err log'", ["7"], "/repo"),
@@ -217,6 +224,13 @@ class ReviewCheck(unittest.TestCase):
             self.assertEqual(fetch.calls, [], command)
             self.assertIn("could not check", text.lower())
             self.assertIn("folder", text)
+        # A pull request number only the shell knows can't be looked up either.
+        fetch = Fetch(pr(REVIEW))
+        text = warning(
+            review_check.decide(bash("gh pr merge $(cat n) --squash"), fetch)
+        )
+        self.assertEqual(fetch.calls, [])
+        self.assertIn("could not check", text.lower())
         # With --repo the folder doesn't matter, so it is still checked.
         fetch = Fetch(pr(REVIEW))
         self.assertIsNone(
