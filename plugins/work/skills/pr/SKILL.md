@@ -33,6 +33,16 @@ again).
 
 ### 1. Rebase onto main
 
+First check the branch isn't spent:
+
+```bash
+gh pr view --json number,url,state 2>/dev/null
+```
+
+`MERGED` or `CLOSED`: the branch's pull request is done. Start a new branch from `origin/main` and bring over only
+the commits made after it merged (`git switch -c <new-name> origin/main`, then `git cherry-pick <commits>`).
+Otherwise:
+
 ```bash
 git fetch origin main
 git rebase origin/main
@@ -48,14 +58,9 @@ by taking one side wholesale.
 
 ### 3. Push
 
-```bash
-gh pr view --json number,url,state 2>/dev/null
-```
-
-- `MERGED` or `CLOSED`: the branch is spent. Start a new branch from this one (`git switch -c <new-name>`).
-- `OPEN` or none: `git push --force-with-lease origin HEAD` (your own branch; no need to ask). An `OPEN` pull
-  request with auto-merge armed: disarm it first (`gh pr merge <n> --disable-auto`), so new commits can't merge
-  before step 5 reviews them.
+`git push --force-with-lease origin HEAD` (your own branch; no need to ask). An `OPEN` pull request with
+auto-merge armed: disarm it first (`gh pr merge <n> --disable-auto`), so new commits can't merge
+before step 5 reviews them.
 
 ### 4. Open or update the pull request
 
@@ -89,8 +94,8 @@ task:
    hook finds it.
 
 **Pull-request checklist.** Leave out of the brief an item turned off for the repo in the overrides file the
-guards plugin reads (its README, "Turning a rule off for a repo"): `$CLAUDE_GUARDS_OVERRIDES` when it is set,
-else `~/.config/claude-guards/overrides.json`. An item is off when its id is listed with a non-empty `reason`
+guards plugin reads (its README, "Turning a rule off for a repo"): `overrides.json` at the guards plugin's root if
+it ships one, else `$CLAUDE_GUARDS_OVERRIDES` when it is set, else `~/.config/claude-guards/overrides.json`. An item is off when its id is listed with a non-empty `reason`
 under the repo's `owner/name` in lower case, else, when the repo has no entry of its own, under the first group
 pattern that matches it (`my-org/*`), and the id is not in the file's `_locked` list (which is not a repo).
 With no file, or none of these, copy all five:
@@ -171,7 +176,7 @@ standup list    # if standup is installed
   has no comment starting with the agent line. Commits after the reviewed one must be only fixes for its
   findings or for a failing check, or a rebase that replays the same change; anything else goes back through
   step 5.
-- `CONFLICTING`: rebase onto `origin/main` (step 1), push, and arm again. A force-push disarms auto-merge.
+- `CONFLICTING`: rebase onto `origin/main` (step 1), push, and arm again (step 3 disarmed it before the push).
 - Check the repo's open GitHub issues first (`gh issue list --state open`): if another issue covers the same work
   or the same files, name it in your report.
 
@@ -187,7 +192,8 @@ gh pr checks <number> --watch --interval 60
 gh pr view <number> --json state,mergeCommit -q '"\(.state) \(.mergeCommit.oid)"'
 ```
 
-Only `MERGED` with a merge commit proves it landed. Still `OPEN` with every check passed: read why
+Only `MERGED` with a merge commit proves it landed. GitHub can take a minute after the last check to merge:
+still `OPEN` with auto-merge armed, look once more a minute later. Still `OPEN` after that: read why
 (`gh pr view <number> --json mergeStateStatus,reviewDecision`) and say so; don't loop.
 
 ### M3. Watch what the merge starts

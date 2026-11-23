@@ -147,7 +147,7 @@ An optional `.claude/work.toml` sets format details:
 defects = ["Bugs"]                    # the defects heading(s)
 next = ["Security", "Next", "Later"]  # the sections taken after defects, in order
 skip = ["(owner)", "**Owned by**"]    # text marking an entry that isn't free
-merge_method = "squash"               # how claim pull requests merge: squash, rebase or merge
+merge_method = "squash"               # how claim and pr-skill pull requests merge: squash, rebase or merge
 branch_prefix = "work/"               # the work branch is <prefix><slug of the title>
 ```
 
