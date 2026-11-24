@@ -60,9 +60,14 @@ def projects(tmp_path: Path) -> Path:
     return tmp_path / "projects"
 
 
-def test_fields_reads_name_type_and_shared(tmp_path: Path) -> None:
+def test_fields_reads_name_type_shared_and_description(tmp_path: Path) -> None:
     p = memory(tmp_path / "x" / "memory", "a", "rule", kind="project", shared="keep")
-    assert memories.fields(p) == {"name": "a", "type": "project", "shared": "keep"}
+    assert memories.fields(p) == {
+        "name": "a",
+        "type": "project",
+        "shared": "keep",
+        "description": "d",
+    }
     bare = tmp_path / "m.md"
     bare.write_text("just text\n", encoding="utf-8")
     assert memories.fields(bare) == {}
@@ -321,3 +326,49 @@ def test_an_empty_shared_line_counts_as_undecided(projects: Path) -> None:
     assert "shared" not in memories.fields(p)
     assert memories.fields(p)["type"] == "feedback"
     assert memories.offerable(p, projects)
+
+
+def test_the_list_puts_each_memory_on_its_own_line_with_its_summary(
+    projects: Path,
+) -> None:
+    folder = projects / "-Users-x-Code-gh-widgets" / "memory"
+    memory(folder, "open-one", "rule a")
+    memory(folder, "kept", "rule b", shared="keep")
+    memory(folder, "me", "rule d", kind="user")
+    (folder / "folded.md").write_text(
+        "---\nname: folded\ndescription: >-\n  first half\n  second half\nmetadata:\n  type: project\n---\n\nx\n",
+        encoding="utf-8",
+    )
+    (folder / "bare.md").write_text("no frontmatter, just the rule\n", encoding="utf-8")
+    assert memories.listing(projects) == [
+        "- `bare`: no frontmatter, just the rule",
+        "- `folded`: first half second half",
+        "- `open-one`: d",
+    ]
+
+
+def test_the_sweep_shows_the_list_one_per_line(swept: Path, tmp_path: Path) -> None:
+    text = memories.sweep(swept, tmp_path / "s", now=time.time())
+    assert "\n  - `open-one`: d" in text
+    assert "one per line" in text
+
+
+def test_the_list_command_prints_every_undecided_memory(
+    projects: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = projects / "-Users-x-Code-gh-widgets" / "memory"
+    for i in range(12):
+        memory(folder, f"m{i:02d}", "rule")
+    monkeypatch.setenv("WORK_MEMORY_PROJECTS", str(projects))
+    out = subprocess.run(
+        ["python3", str(SCRIPT), "list"], capture_output=True, text=True, check=True
+    ).stdout
+    assert out.count("\n- `") + out.startswith("- `") == 12
+    empty = subprocess.run(
+        ["python3", str(SCRIPT), "list"],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "WORK_MEMORY_PROJECTS": str(projects / "none")},
+    ).stdout
+    assert empty == "No memories are waiting to be shared or kept.\n"

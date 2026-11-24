@@ -10,6 +10,8 @@ Two hooks, both silent unless they have something to offer, and never failing th
 - `sweep` (at session start, at most once a day): lists memories still undecided, and those whose sharing pull
   request may have merged (their memory can then go).
 
+`list` (run by the add-knowledge skill, not a hook) prints every undecided memory, one per line with its summary.
+
 A memory is a file `~/.claude/projects/<folder>/memory/<name>.md` (not the MEMORY.md index). `shared:` in its
 frontmatter records the decision: `keep` (personal, never offered again) or the URL of the pull request that
 shared it. `$WORK_MEMORY_MATCH`, a regular expression (case ignored), limits both hooks to memories whose folder
@@ -33,6 +35,7 @@ DAY = (
     20 * 3600
 )  # "once a day": a session the next morning counts, even if it starts a little earlier
 SHOWN = 9
+SUMMARY = 160  # characters of a memory's summary shown in a list
 
 
 def projects_dir() -> Path:
@@ -49,7 +52,7 @@ def stamp_file() -> Path:
 
 
 def fields(path: Path) -> dict:
-    """The frontmatter's name, type and shared (only those present)."""
+    """The frontmatter's name, type, shared and description (only those present)."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -64,7 +67,30 @@ def fields(path: Path) -> dict:
         )
         if value:
             found[key] = value.group(1).strip("'\"")
+    # A top-level description, on its line or folded onto the indented lines after `>-` or `|`.
+    value = re.search(
+        r"^description:[ \t]*(.*)\n((?:[ \t]+\S.*(?:\n|$))*)",
+        match.group(1),
+        re.MULTILINE,
+    )
+    if value:
+        head = value.group(1).strip()
+        words = ([] if head[:1] in (">", "|") else [head]) + value.group(2).split()
+        found["description"] = " ".join(" ".join(words).split()).strip("'\"")
     return found
+
+
+def summary(path: Path) -> str:
+    """One line on what the memory says: its description, else the first line of its text."""
+    text = fields(path).get("description", "")
+    if not text:
+        try:
+            body = path.read_text(encoding="utf-8")
+        except (OSError, ValueError):
+            body = ""
+        body = re.sub(r"\A---\n.*?\n---\n", "", body, flags=re.DOTALL)
+        text = next((line.strip() for line in body.splitlines() if line.strip()), "")
+    return text if len(text) <= SUMMARY else text[: SUMMARY - 1].rstrip() + "…"
 
 
 def is_memory(path: Path, projects: Path) -> bool:
@@ -169,13 +195,8 @@ def after_write(event: dict, projects: Path) -> dict | None:
     }
 
 
-def sweep(projects: Path, stamp: Path, now: float) -> str:
-    """Once a day: the undecided memories and the ones whose pull request may have merged. Empty if none."""
-    try:
-        if now - float(stamp.read_text().strip()) < DAY:
-            return ""
-    except (OSError, ValueError):
-        pass
+def waiting(projects: Path) -> tuple[list[Path], list[tuple[Path, str]]]:
+    """In scope and not `type: user`: the undecided memories, and the sent ones with their pull request."""
     undecided, sent = [], []
     try:
         patterns = wanted()
@@ -192,6 +213,24 @@ def sweep(projects: Path, stamp: Path, now: float) -> str:
             undecided.append(path)
         elif shared.startswith("http"):
             sent.append((path, shared))
+    return undecided, sent
+
+
+def listing(projects: Path, paths: list[Path] | None = None) -> list[str]:
+    """The undecided memories (or `paths`), one line each: name and summary."""
+    if paths is None:
+        paths = waiting(projects)[0]
+    return [f"- `{p.stem}`: {summary(p)}" for p in paths]
+
+
+def sweep(projects: Path, stamp: Path, now: float) -> str:
+    """Once a day: the undecided memories and the ones whose pull request may have merged. Empty if none."""
+    try:
+        if now - float(stamp.read_text().strip()) < DAY:
+            return ""
+    except (OSError, ValueError):
+        pass
+    undecided, sent = waiting(projects)
     try:
         stamp.parent.mkdir(parents=True, exist_ok=True)
         stamp.write_text(str(now))
@@ -203,13 +242,14 @@ def sweep(projects: Path, stamp: Path, now: float) -> str:
         "Memory check (work plugin, once a day). Do not interrupt the person's request for this;"
     ]
     if undecided:
-        names = ", ".join(f"`{p.stem}`" for p in undecided[:SHOWN])
-        more = f" and {len(undecided) - SHOWN} more" if len(undecided) > SHOWN else ""
+        more = f" (and {len(undecided) - SHOWN} more)" if len(undecided) > SHOWN else ""
         lines.append(
-            f"- {len(undecided)} memories not yet shared or kept: {names}{more}. At the end of your first reply, "
-            'add one line: "Memories waiting to be shared with the team: … — `/add-knowledge` to share them '
-            '(or `/add-knowledge keep`)". Skip any that are clearly personal.'
+            f"- {len(undecided)} memories not yet shared or kept{more}. At the end of your first reply, add "
+            '"Memories waiting to be shared with the team (`/add-knowledge` to share them, `/add-knowledge keep` '
+            'to keep them personal, `/add-knowledge list` for all of them):" and then these, one per line as '
+            "given, leaving out any that are clearly personal:"
         )
+        lines += ["  " + line for line in listing(projects, undecided[:SHOWN])]
     if sent:
         listed = "; ".join(f"`{p}` ({url})" for p, url in sent[:SHOWN])
         more = f" and {len(sent) - SHOWN} more" if len(sent) > SHOWN else ""
@@ -228,6 +268,13 @@ def main(argv: list[str]) -> int:
             out = after_write(json.load(sys.stdin), projects_dir())
             if out:
                 print(json.dumps(out))
+        elif argv[:1] == ["list"]:
+            lines = listing(projects_dir())
+            print(
+                "\n".join(lines)
+                if lines
+                else "No memories are waiting to be shared or kept."
+            )
         elif argv[:1] == ["sweep"]:
             text = sweep(projects_dir(), stamp_file(), time.time())
             if text:

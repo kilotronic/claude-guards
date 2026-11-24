@@ -3,8 +3,9 @@ name: add-knowledge
 description: >-
   Share something Claude saved to its memory with the whole team, by pull request to the right file every
   session reads (one repo's CLAUDE.md, the team's shared rules, or a how-to page); or mark it personal with
-  `keep`. Use for "/add-knowledge" (no arguments: whatever was just offered), "/add-knowledge keep", and
-  "/add-knowledge <memory> [repo|team|keep]".
+  `keep`. Use for "/add-knowledge" (no arguments: list what waits, then share what was just offered),
+  "/add-knowledge list" or "show" (just the list), "/add-knowledge keep", and "/add-knowledge <memory>
+  [repo|team|keep]".
 ---
 
 # Add knowledge: from one laptop's memory to the team's files
@@ -12,15 +13,27 @@ description: >-
 Claude's memory lives on one machine; a teammate's Claude never sees it. What the team should all know goes into
 files every session reads. This skill moves one memory there, or marks it personal.
 
-Arguments are all optional:
+Arguments are all optional.
 
-- **None:** the memories offered in this conversation: the one(s) you offered with "Worth sharing with the
-  team?", or the daily list's "Memories waiting to be shared". Several: do each in turn, one pull request per
-  repo (several memories for the same file go in one pull request). Nothing was offered in this conversation:
-  take the first 9 the daily check would list (undecided memories, not `type: user`, sorted by folder and name,
-  that match `$WORK_MEMORY_MATCH` when it is set, else the lists in `~/.config/claude-guards/memory-match/` as
-  the work plugin's README says it reads them), show their names with one line each on what they say, and do them, skipping ones that are clearly personal (offer `keep` for those in your report). Say how many are
-  left for the next run.
+**The list.** Whenever you show the person memories to consider, show them one per line, each with a short
+summary of what it says. Get the list from the hook script, which reads the same memories the daily check does
+(undecided, not `type: user`, matching `$WORK_MEMORY_MATCH` or the plugin lists in
+`~/.config/claude-guards/memory-match/`, sorted by folder and name):
+
+```bash
+python3 "${CLAUDE_SKILL_DIR}/../../hooks/memories.py" list
+```
+
+Print its lines as they are (a dash, the name in backticks, a colon and the summary), with a count above them. Mark any that are clearly personal
+with "(personal? `keep`)" at the end of its line rather than dropping it.
+
+- **`list` or `show`:** print the list, then one line: "`/add-knowledge` to share them, `/add-knowledge <name>`
+  for one, `/add-knowledge keep` to keep what was offered personal." Change nothing; stop.
+- **None:** print the list first. Then do the memories offered in this conversation: the one(s) you offered
+  with "Worth sharing with the team?", or the daily list's "Memories waiting to be shared". Several: do each in
+  turn, one pull request per repo (several memories for the same file go in one pull request). Nothing was
+  offered in this conversation: do the first 9 on the list, skipping ones that are clearly personal (offer
+  `keep` for those in your report). Say how many are left for the next run.
 - **`keep`:** mark what was offered (as above) personal.
 - **`<memory name>`** (the file name in `~/.claude/projects/*/memory/`, without `.md`), then optionally `keep`, a
   repo name or `team`: just that memory.
