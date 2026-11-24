@@ -41,6 +41,7 @@ def test_a_claim_commits_the_mark_on_the_work_branch(tmp_path: Path) -> None:
         "docs/todo.md"
     ]
     assert "open" in out and "pull request" in out
+    assert "as a draft" in out  # work-start opens the claiming pull request as a draft
 
 
 def test_a_claim_opens_no_pull_request_of_its_own_and_pushes_nothing(
@@ -79,6 +80,14 @@ def test_an_item_an_open_pull_request_holds_is_refused_naming_it(
     assert rc == 3
     assert "agent-b" in out + err and "#7" in out + err
     assert git(wt, "log", "-1", "--format=%s", "HEAD").strip() == "chore: start"
+
+
+def test_an_item_a_draft_pull_request_holds_is_refused(tmp_path: Path) -> None:
+    p = make_project(tmp_path)
+    p.open_claim("Add a snooze button", "agent-b", 7, draft=True)
+    rc, out, err = p.run("claim", "Add a snooze button", cwd=work_tree(p, tmp_path))
+    assert rc == 3
+    assert "#7" in out + err
 
 
 def test_your_own_open_pull_request_is_already_yours(tmp_path: Path) -> None:

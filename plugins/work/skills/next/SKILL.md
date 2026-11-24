@@ -36,7 +36,7 @@ Take what it names, unless the user named an item; don't stop to offer it.
 ## 2. Start it
 
 Run `/work:work-start` on the item. It proves the item is still open, makes the worktree and branch, commits
-the claim mark and opens the work's pull request at once (that open pull request is the claim; of two on one
+the claim mark and opens the work's pull request at once, as a draft (that open pull request is the claim; of two on one
 item, the lower number wins), and restates what done means. If someone else took the
 item, go back to step 1.
 

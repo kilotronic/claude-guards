@@ -138,10 +138,12 @@ class Project:
         machine: str = "box1",
         then_delete: bool = False,
         replace_mark: bool = False,
+        draft: bool = False,
     ) -> dict:
         """Push a work branch whose first commit marks `title` as `who`'s, and list its open pull request #`number`,
         last active on `updated`. With `then_delete`, a second commit deletes the entry, as work-finish does; with
-        `replace_mark`, the branch swaps a mark main already has for its own."""
+        `replace_mark`, the branch swaps a mark main already has for its own; with `draft`, GitHub lists it as a draft,
+        as work-start opens it."""
         name = f"work/{who}-{number}"
         base = self.origin_file("docs/todo.md")
         if replace_mark:
@@ -169,6 +171,7 @@ class Project:
             "author": {"login": f"{who}-login"},
             "url": f"https://github.com/example/widgets/pull/{number}",
             "updatedAt": f"{updated}T12:00:00Z",
+            "isDraft": draft,
         }
         path = self.gh_dir / "open.json"
         listed = json.loads(path.read_text()) if path.exists() else []

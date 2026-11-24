@@ -2,8 +2,8 @@
 name: work-start
 description:
   Start one todo item properly. Proves it is still open, makes the worktree and branch off origin/main, commits
-  the claim mark with goal claim and opens the work's pull request at once (the open pull request is the
-  claim), checks again that no lower-numbered pull request marks the same item, and restates what done
+  the claim mark with goal claim and opens the work's pull request at once, as a draft (the open pull request is
+  the claim), checks again that no lower-numbered pull request marks the same item, and restates what done
   means. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the
   next skill.
 ---
@@ -45,7 +45,7 @@ In the worktree, in this order:
 ```bash
 goal claim '<the entry's title>'        # checks the open pull requests, then commits the mark as the first commit
 git push -u origin <branch>
-gh pr create --title '<type>: <the work, in the imperative>' --body '<what and why; the item it claims>'
+gh pr create --draft --title '<type>: <the work, in the imperative>' --body '<what and why; the item it claims>'
 goal claim '<the entry's title>'        # again, now that the pull request is open: settles a tie
 ```
 
@@ -53,8 +53,9 @@ goal claim '<the entry's title>'        # again, now that the pull request is op
   commit to push, so make the work's first commit before opening the pull request.
 - **The first `goal claim` exits 3**: an open pull request already marks the item (it names it), or the item
   needs the owner. Remove the worktree and branch, and go back to `goal`.
-- **Open the pull request now**, ready (not draft), and **don't arm auto-merge**: work-finish does that
-  once the work is done. No CI or review has to pass before the work starts.
+- **Open the pull request now, as a draft** (`--draft`), and **don't arm auto-merge**: the draft says the work
+  isn't ready yet. work-finish marks it ready (`gh pr ready`) and arms auto-merge once the work is done. A draft
+  holds the item like any open pull request. No CI or review has to pass before the work starts.
 - **The second `goal claim` settles a tie.** Two sessions can both pass the first check in the seconds before
   either pull request opens. The lower pull request number wins. Exit 0 (`already yours`) means yours holds
   the item. Exit 3 means another pull request marked it first: close yours with a comment naming the winner,
@@ -104,7 +105,7 @@ and use the steps below only where they say nothing. With none, the minimal step
 - **Claim:** the work's open pull request is the claim, as with a todo file; the assignee only shows it on
   the issue. Make the worktree and a branch `work/<n>-<slug of the title>` as in step 2, make the work's first
   commit (GitHub opens no pull request without one), push, open the work's pull
-  request at once with `Closes #<n>` in its body, and `gh issue edit <n> --add-assignee @me`. An issue someone
+  request at once as a draft (`gh pr create --draft`) with `Closes #<n>` in its body, and `gh issue edit <n> --add-assignee @me`. An issue someone
   else is assigned to, or that another open pull request already names, is theirs: pick another.
 - **Settle a tie:** two sessions can both pass that check in the same minute, so once yours is open, look
   again: `gh issue view <n> --json closedByPullRequestsReferences` lists the pull requests that close it. An

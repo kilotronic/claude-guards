@@ -129,7 +129,7 @@ The facts live in the README, where people read them too, under one heading, as 
 - **Mission:** <who this is for and what it does for them>
 - **Current milestone:** <name>. **Done when:** <a finish line a person can check>. **By:** <date, or "no date">
 - **Work is recorded in:** `docs/todo.md`
-- **Claim before starting:** `goal claim '<the entry's title>'` as the work branch's first commit, with its pull request opened at once
+- **Claim before starting:** `goal claim '<the entry's title>'` as the work branch's first commit, with its pull request opened at once, as a draft
 - **Work in progress:** at most <N> at once; defect fixes one at a time
 - **Defects first:** the Defects section is fixed, top first, before anything new
 ```
@@ -186,8 +186,10 @@ repo's own checks of its entries read it as before:
 ```
 
 - **Starting:** on the work's new branch, `goal claim '<title>'` commits the mark, touching only that line.
-  Push the branch and open the work's pull request at once, ready for review but with auto-merge not armed. No
-  separate pull request has to merge first, and the work starts right away.
+  Push the branch and open the work's pull request at once, as a draft (`gh pr create --draft`), with auto-merge
+  not armed. No separate pull request has to merge first, and the work starts right away. A draft holds the item
+  like any open pull request; work-finish marks it ready (`gh pr ready`) when the work is done, then arms
+  auto-merge.
 - **An item is in progress while an open pull request carries its mark.** `goal` asks GitHub for the open pull
   requests into the default branch, as GitHub names it (`gh repo view`), not the local `origin/HEAD`, which
   can be stale. It reads the todo file on each one's branch. The claim is that pull request's, named with
@@ -232,8 +234,8 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `orient`        | What changed on main, `goal --list`, who else is working, open pull requests, one recommendation. Reads only                                 |
 | `next`          | Takes `goal`'s item and does it, start to merged, through `work-start` and `work-finish`                                                     |
-| `work-start`    | Proves the item is still open, makes the branch, commits the claim mark and opens the work's pull request, says what done means              |
-| `work-finish`   | Removes the entry in the work's pull request, files follow-ups, runs the gates; after merge, cleans up                                       |
+| `work-start`    | Proves the item is still open, makes the branch, commits the claim mark and opens the work's draft pull request, says what done means        |
+| `work-finish`   | Removes the entry in the work's pull request, files follow-ups, runs the gates, marks it ready; after merge, cleans up                       |
 | `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default                                   |
 | `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                      |
 | `pr`            | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed                |

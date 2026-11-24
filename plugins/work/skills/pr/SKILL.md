@@ -1,6 +1,6 @@
 ---
 name: pr
-allowed-tools: Bash(git fetch *), Bash(git rebase origin/*), Bash(git status*), Bash(git log *), Bash(git rev-parse *), Bash(git push --force-with-lease origin HEAD), Bash(gh pr view *), Bash(gh pr create *), Bash(gh pr edit *), Bash(gh pr comment *), Bash(gh pr checks *), Bash(gh issue list *), Bash(gh run view *), Bash(gh run list *), Bash(gh run watch *), Bash(goal merged *), Agent, Skill(code-review)
+allowed-tools: Bash(git fetch *), Bash(git rebase origin/*), Bash(git status*), Bash(git log *), Bash(git rev-parse *), Bash(git push --force-with-lease origin HEAD), Bash(gh pr view *), Bash(gh pr create *), Bash(gh pr ready *), Bash(gh pr edit *), Bash(gh pr comment *), Bash(gh pr checks *), Bash(gh issue list *), Bash(gh run view *), Bash(gh run list *), Bash(gh run watch *), Bash(goal merged *), Agent, Skill(code-review)
 description:
   Open a pull request for the current branch (rebase, docs, checks, a fresh reviewer agent), or with "merge"
   arm auto-merge and confirm it landed. Use for "open a PR", "ship this branch", "merge it".
@@ -69,7 +69,9 @@ before step 5 reviews them.
 
 ### 4. Open or update the pull request
 
-Open it ready for review (not a draft), unless the repo's CLAUDE.md asks for a draft:
+Open it ready for review: by now the work is done. An existing draft (work-start opens the work's pull request
+as a draft) is marked ready now, with `gh pr ready <n>`, once its work is done and pushed. A repo whose CLAUDE.md
+says otherwise about drafts wins.
 
 - **Title** (it becomes the commit subject): `<type>: <the outcome in plain words>`, under 70 characters, the
   summary in the imperative (`fix: keep the deadline on the map`, not `Fixed ...`).
@@ -168,11 +170,12 @@ or with the person's say-so; a repo's CLAUDE.md can restrict it.
 ### M1. Arm auto-merge
 
 ```bash
-gh pr view --json number,url,state,mergeable
+gh pr view --json number,url,state,isDraft,mergeable
 gh pr view --json headRefOid -q .headRefOid; git rev-parse HEAD
 ```
 
 - Not `OPEN`: stop and say why.
+- `isDraft` true: GitHub merges no draft. Mark it ready (`gh pr ready <n>`) once its work is done, then go on.
 - The two commit ids differ: push, or find out whose commit it is, before arming.
 - No review line in the description linking a reviewer's comment on this pull request (step 5): run step 5 first.
   Nothing merges without a fresh review. This plugin's merge hook warns at `gh pr merge` when the pull request
