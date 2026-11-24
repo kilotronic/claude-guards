@@ -38,6 +38,9 @@ the main checkout, branched from the up-to-date `origin/main`:
 git worktree add ../<repo>-<slug> -b <branch> origin/main
 ```
 
+Then the repo's own set-up (its README or CLAUDE.md), in that worktree, before claiming: `goal claim` commits
+there, so the repo's commit hooks need what the set-up installs.
+
 ## 3. Claim it: the work's pull request is the claim
 
 In the worktree, in this order:
@@ -65,8 +68,6 @@ goal claim '<the entry's title>'        # again, now that the pull request is op
   didn't answer, or another pull request's branch isn't fetched yet): run it again; don't start until it
   exits 0.
 - `goal` now answers **finish** with this item and names your pull request.
-
-Then the repo's own set-up (its README or CLAUDE.md), in that worktree.
 
 ## 4. Say what done means
 
