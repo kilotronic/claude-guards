@@ -259,7 +259,7 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
 - **Memories are offered to the team** (`memories.py`). After Claude writes a memory
   (`~/.claude/projects/<folder>/memory/<name>.md`) that is not `type: user` and not decided, Claude ends its reply
   with a one-line offer to share it (`/add-knowledge`). At most once a day (20 hours apart), the first session to start lists memories
-  still waiting, and those whose sharing pull request may have merged. `shared: keep` in a memory's frontmatter
+  still waiting, and those whose sharing pull request may have merged. `/add-knowledge list` shows every memory still waiting, one per line with a summary. `shared: keep` in a memory's frontmatter
   marks it personal; `shared: <pull request URL>` records that it was sent. Set `$WORK_MEMORY_MATCH` (a regular
   expression, case ignored, for example your team's repo names) to offer only memories whose folder name or text
   matches. A team's own plugin can set this for everyone who installs it instead: its start-up hook copies a file
