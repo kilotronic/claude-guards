@@ -372,3 +372,13 @@ def test_the_list_command_prints_every_undecided_memory(
         env={**os.environ, "WORK_MEMORY_PROJECTS": str(projects / "none")},
     ).stdout
     assert empty == "No memories are waiting to be shared or kept.\n"
+
+
+def test_a_description_that_is_the_last_field_is_read(tmp_path: Path) -> None:
+    p = tmp_path / "x" / "memory" / "a.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        "---\nname: a\ndescription: hello there\n---\n\nbody\n", encoding="utf-8"
+    )
+    assert memories.fields(p)["description"] == "hello there"
+    assert memories.summary(p) == "hello there"

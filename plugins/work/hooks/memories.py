@@ -69,7 +69,7 @@ def fields(path: Path) -> dict:
             found[key] = value.group(1).strip("'\"")
     # A top-level description, on its line or folded onto the indented lines after `>-` or `|`.
     value = re.search(
-        r"^description:[ \t]*(.*)\n((?:[ \t]+\S.*(?:\n|$))*)",
+        r"^description:[ \t]*(.*)(?:\n|$)((?:[ \t]+\S.*(?:\n|$))*)",
         match.group(1),
         re.MULTILINE,
     )
@@ -242,14 +242,15 @@ def sweep(projects: Path, stamp: Path, now: float) -> str:
         "Memory check (work plugin, once a day). Do not interrupt the person's request for this;"
     ]
     if undecided:
-        more = f" (and {len(undecided) - SHOWN} more)" if len(undecided) > SHOWN else ""
         lines.append(
-            f"- {len(undecided)} memories not yet shared or kept{more}. At the end of your first reply, add "
+            f"- {len(undecided)} memories not yet shared or kept. At the end of your first reply, add "
             '"Memories waiting to be shared with the team (`/add-knowledge` to share them, `/add-knowledge keep` '
             'to keep them personal, `/add-knowledge list` for all of them):" and then these, one per line as '
             "given, leaving out any that are clearly personal:"
         )
         lines += ["  " + line for line in listing(projects, undecided[:SHOWN])]
+        if len(undecided) > SHOWN:
+            lines.append(f"  - and {len(undecided) - SHOWN} more")
     if sent:
         listed = "; ".join(f"`{p}` ({url})" for p, url in sent[:SHOWN])
         more = f" and {len(sent) - SHOWN} more" if len(sent) > SHOWN else ""
