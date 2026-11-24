@@ -24,8 +24,9 @@ the issue; the gates, the merge and the clean-up below are the same.
   with no claim mark.
 - **Run the repo's gates**: its formatters, linters and tests (its CLAUDE.md or Makefile), and the review its
   rules require. Fix the findings before merge.
-- The pull request has been open, ready, since work-start. Finish it with the `pr` skill, with its fresh
-  review. Arm auto-merge only now, once its head is your pushed commit
+- The pull request has been open, as a draft, since work-start. Finish it with the `pr` skill, with its fresh
+  review: once the work is done and pushed, mark it ready (`gh pr ready <n>`), since GitHub merges no draft.
+  Arm auto-merge only after that, once its head is your pushed commit
   (`gh pr view --json headRefOid -q .headRefOid` equals `git rev-parse HEAD`).
 
 ## 2. After merge

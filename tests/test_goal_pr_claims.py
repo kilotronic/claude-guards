@@ -31,6 +31,21 @@ def test_an_open_pull_request_carrying_the_mark_claims_the_item(
     assert "The timer skips a second: agent-b on box1, 2026-11-21, #7" in text
 
 
+def test_a_draft_pull_request_carrying_the_mark_claims_the_item(
+    tmp_path: Path,
+) -> None:
+    """work-start opens the work's pull request as a draft, so a draft holds the item like any open one."""
+    p = make_project(tmp_path)
+    p.open_claim("The timer skips a second", "agent-b", 7, draft=True)
+    rc, out = p.json()
+    assert rc == 0
+    (claim,) = out["in_progress"]["claims"]
+    assert (claim["title"], claim["pr"]) == ("The timer skips a second", 7)
+    assert out["next"]["item"]["title"] == "Add a snooze button"
+    (call,) = [c for c in p.gh_calls() if c[:2] == ["pr", "list"]]
+    assert "--draft" not in call  # gh's --draft would list drafts only
+
+
 def test_your_own_open_pull_request_is_your_item(tmp_path: Path) -> None:
     p = make_project(tmp_path)
     p.open_claim("Show the time left in the title", "agent-a", 7)
