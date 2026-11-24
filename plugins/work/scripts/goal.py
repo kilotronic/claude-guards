@@ -1474,7 +1474,7 @@ def claim(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
         "status": "ok",
         "branch": branch,
         "message": f'marked "{entry.title}" on {branch}. Now push the branch and open the work\'s pull request'
-        " (ready, auto-merge not armed): once it is open, it is the claim.",
+        " as a draft (auto-merge not armed): once it is open, it is the claim.",
         "warnings": repo.warnings,
     }
 

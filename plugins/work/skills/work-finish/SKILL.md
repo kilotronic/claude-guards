@@ -2,8 +2,8 @@
 name: work-finish
 description:
   Finish one claimed todo item. In the work's own pull request, removes the entry (the claim ends when it
-  merges), files follow-ups as new entries, runs the repo's gates and arms auto-merge; after it shows MERGED,
-  removes the worktree and branches. Also abandons an item cleanly by closing
+  merges), files follow-ups as new entries, runs the repo's gates, marks the pull request ready and arms
+  auto-merge; after it shows MERGED, removes the worktree and branches. Also abandons an item cleanly by closing
   its pull request. Use for "finish this", "land it", "wrap up", "abandon this item".
 ---
 

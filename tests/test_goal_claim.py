@@ -41,6 +41,7 @@ def test_a_claim_commits_the_mark_on_the_work_branch(tmp_path: Path) -> None:
         "docs/todo.md"
     ]
     assert "open" in out and "pull request" in out
+    assert "as a draft" in out  # work-start opens the claiming pull request as a draft
 
 
 def test_a_claim_opens_no_pull_request_of_its_own_and_pushes_nothing(
