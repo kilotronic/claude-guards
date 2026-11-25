@@ -6,8 +6,8 @@ Two [Claude Code](https://code.claude.com) plugins for agents working in a repos
   why and what to do instead, so the agent can fix its own command and carry on.
 - **work**: the `next-item` command, which answers "what should I work on next?" from what the repo states in
   writing; the skills that claim an item, build it and land it (`pr` opens the pull request and has a fresh
-  agent review it); `long-loops` and `add-knowledge`; hooks around merging; and a hook that offers to share what
-  Claude saves to memory. See [The work plugin](#the-work-plugin).
+  agent review it, and `pr-batch` lands several of your own as one); `long-loops` and `add-knowledge`; hooks
+  around merging; and a hook that offers to share what Claude saves to memory. See [The work plugin](#the-work-plugin).
 
 The guards were written for several agents working in one repository at once, each in its own git worktree.
 They suit a single agent too. Note that a plain clone is its own main checkout, so the main-checkout guards
@@ -197,12 +197,15 @@ repo's own checks of its entries read it as before:
   its number, its author and the mark's holder. finish-work deletes the entry in the same pull request, and the
   claim holds until it merges.
 - **Merged:** the entry is gone from the default branch, so the item is too. **Closed without merging:** the
-  item is free again.
+  item is free again, unless a batch pull request carries its mark (below).
 - **Ties are settled on GitHub.** `next-item claim` refuses an item an open pull request already marks. Two
   sessions can still both pass that check in the seconds before either pull request opens, so start-work runs
   `next-item claim` again once its pull request is open. The lower pull request number wins: the higher one gets
   exit 3 naming the winner, and closes itself with a comment pointing at it. `next-item` names both pull requests
   while both are open, and tells the later one to stop.
+- **A batch carries the claims it lands.** The `pr-batch` skill's combined pull request first commits the marks of
+  the pull requests it batches, then their work, and closes them once it is open: from then on it holds their
+  items. Until they close, `next-item` names both, the lower number (the original) as the holder.
 - **Releasing:** to drop the work, close its pull request (a mark on the default branch needs a merged
   `next-item release`, below). To go on under another item, run
   `next-item release '<title>'`, which commits the mark away on the branch, then `next-item claim` on the other one.
@@ -240,6 +243,7 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 | `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `next-item merged`. Dry run by default                              |
 | `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                      |
 | `pr`            | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed                |
+| `pr-batch`      | Lands several of your own open pull requests as one, a commit each: closes the originals, reviews and arms the batch, says where each landed |
 | `add-knowledge` | Moves a memory Claude saved into the file every session reads (a repo's CLAUDE.md or the team's rules) by pull request, or marks it personal |
 
 The `pr` skill's checklist leaves out an item turned off for the repo in the guards' overrides file, by the item's
