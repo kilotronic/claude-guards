@@ -32,9 +32,25 @@ def test_the_section_ends_at_the_next_heading() -> None:
     assert facts is not None and "frozen" not in facts
 
 
-def test_a_milestone_that_links_a_file_is_read_as_the_goals_file() -> None:
-    text = "## How work runs here\n\n- **Current milestone:** see [the goals](docs/goals.md) § _Priority_\n"
+@pytest.mark.parametrize(
+    "milestone",
+    [
+        "see [the goals](docs/goals.md) § _Priority_",
+        "[docs/goals.md](docs/goals.md)",
+        "the first one not done in [the goals](docs/goals.md)",
+        "See: [the goals](docs/goals.md), top first",
+    ],
+)
+def test_a_milestone_that_links_a_file_is_read_as_the_goals_file(
+    milestone: str,
+) -> None:
+    text = f"## How work runs here\n\n- **Current milestone:** {milestone}\n"
     assert next_item.goals_path(next_item.parse_readme(text)) == "docs/goals.md"
+
+
+def test_a_todo_file_is_never_an_address_with_a_scheme() -> None:
+    text = "## How work runs here\n\n- **Work is recorded in:** [mail us](mailto:help@example.com), `docs/todo.md`\n"
+    assert next_item.todo_path(next_item.parse_readme(text)) == "docs/todo.md"
 
 
 @pytest.mark.parametrize(
@@ -43,6 +59,8 @@ def test_a_milestone_that_links_a_file_is_read_as_the_goals_file() -> None:
         "M2, the phone app",
         "close `FINDINGS.md`",  # a backticked name is part of the milestone, not a link
         "ship the [docs site](https://example.com/docs)",  # a web address is not a goals file
+        "write [the FAQ](mailto:help@example.com)",  # nor is any other address with a scheme
+        "M3, port [the CLI](docs/cli.md) to Windows",  # a file the milestone mentions is not where it is stated
     ],
 )
 def test_a_plain_text_milestone_has_no_goals_file(milestone: str) -> None:

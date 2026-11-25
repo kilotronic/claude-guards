@@ -173,6 +173,19 @@ def test_a_milestone_linking_a_file_names_it_as_the_goals_file(tmp_path: Path) -
     assert js["goal"]["milestone"] is None
 
 
+def test_a_linked_milestone_keeps_its_finish_line_and_date(tmp_path: Path) -> None:
+    readme = README.replace(
+        "- **Current milestone:** M2, the phone app. **Done when:** a timer rings on a locked phone. **By:** no date\n",
+        "- **Current milestone:** see [the goals](docs/goals.md). **Done when:** every goal is met. **By:** 2999-01-01\n",
+    )
+    p = make_project(tmp_path, readme=readme, extra={"docs/goals.md": "# Goals\n"})
+    rc, out, _ = p.run()
+    assert rc == 0, out
+    assert out.splitlines()[0] == (
+        "milestone: see docs/goals.md (done when: every goal is met; by 2999-01-01)"
+    )
+
+
 def test_a_plain_text_milestone_is_the_milestone_with_no_goals_file(
     tmp_path: Path,
 ) -> None:

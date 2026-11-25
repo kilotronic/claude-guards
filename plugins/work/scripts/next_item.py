@@ -215,20 +215,29 @@ def todo_path(facts: dict[str, str]) -> str | None:
     value = facts.get("work is recorded in")
     if not value or in_issues(facts):
         return None
-    links = [x for x in re.findall(r"\]\(([^)\s#]+)", value) if "://" not in x]
+    links = [x for x in re.findall(r"\]\(([^)\s#]+)", value) if not _has_scheme(x)]
     m = re.search(r"`([^`\s]+)`", value)
     return links[0] if links else (m.group(1) if m else None)
 
 
+def _has_scheme(target: str) -> bool:
+    """A link to an address (`https://…`, `mailto:…`), not to a file in the repo."""
+    return re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", target) is not None
+
+
+# A **Current milestone:** that points to its goals file: the link comes first, or after "see" or "in".
+_POINTER = re.compile(
+    r"(?:|.*\bin\s+|see:?\s+)\[[^\]]*\]\(([^)\s#]+)[^)]*\)", re.IGNORECASE
+)
+
+
 def goals_path(facts: dict[str, str]) -> str | None:
-    """The goals file: a **Current milestone:** that links a file (not a web address) points there for the
-    milestone, so the link is the goals file and not the milestone's name. A backticked name is plain text."""
-    links = [
-        x
-        for x in re.findall(r"\]\(([^)\s#]+)", facts.get("current milestone") or "")
-        if "://" not in x
-    ]
-    return links[0] if links else None
+    """The goals file: a **Current milestone:** whose value is a link to a file, bare or after "see" or "in"
+    (`see [the goals](docs/goals.md)`), points there for the milestone, so the link is the goals file and not
+    the milestone's name. A file the milestone only mentions (`port [the CLI](docs/cli.md)`), a backticked
+    name and an address with a scheme are plain text."""
+    m = _POINTER.match(facts.get("current milestone") or "")
+    return m.group(1) if m and not _has_scheme(m.group(1)) else None
 
 
 def wip_limit(facts: dict[str, str]) -> int | None:
@@ -1041,7 +1050,7 @@ def load(
         missing.append(f"the **By:** date {by} is not a real date")
     if need_goal and due is not None and due < today:
         missing.append(
-            f"{goal_info['milestone'] or 'the milestone'} was due {by}: is it still the milestone, with a new date?"
+            f"{goal_info['milestone'] or (f'the milestone in {goals_file}' if goals_file else 'the milestone')} was due {by}: is it still the milestone, with a new date?"
         )
     if issues:
         # The repo keeps its work in GitHub issues: next-item has no list or limit to read, and says so. A milestone it
@@ -1254,15 +1263,14 @@ def render(out: dict) -> str:
         return "\n".join(f"unclear: {m}" for m in out["missing"])
     if g.get("frozen"):
         return f"frozen: {g['frozen']}"
-    if g.get("milestone"):
+    name = g.get("milestone") or (
+        f"see {g['goals_file']}" if g.get("goals_file") else None
+    )
+    if name:
         bits = [f"done when: {g['done_when']}"] if g.get("done_when") else []
         if g.get("by") and g["by"] != "no date":
             bits.append(f"by {g['by']}")
-        lines.append(
-            f"milestone: {g['milestone']}" + (f" ({'; '.join(bits)})" if bits else "")
-        )
-    elif g.get("goals_file"):
-        lines.append(f"milestone: see {g['goals_file']}")
+        lines.append(f"milestone: {name}" + (f" ({'; '.join(bits)})" if bits else ""))
     n = out["next"]
     if out.get("record") == "issues":
         lines += [f"record: {g['recorded_in']}", f"next: {n['reason']}"]
