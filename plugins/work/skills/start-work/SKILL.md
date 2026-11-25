@@ -37,7 +37,7 @@ gh pr diff <n> --name-only   # for each open pull request near the item
 ```
 
 If the item would change the same files or the same mechanism as an open pull request, don't start it: one
-concern per pull request, and never build on a branch in review. Take the next item and come back once that one
+concern per pull request, and never build on a branch in review. Take the next item (a worker given this one item asks whoever gave it instead) and come back once that one
 lands, or ask its author whether the item belongs in it.
 
 ## 2. Worktree and branch

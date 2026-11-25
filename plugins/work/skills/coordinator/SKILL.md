@@ -73,8 +73,10 @@ claim, and the coordinator claims nothing.
   done when the item and every follow-up have landed; report each by its pull request.";
 - "A question for the owner, or a design question, comes to me, the coordinator, in one message: the person's
   story, what the code does today and what you searched. Keep working on what it does not block.";
-- for a subagent or a cloud task: "Arm auto-merge and don't wait for it; I watch it to merged. Your final
-  report names each pull request and each follow-up not yet done. Then END, no monitors, no polls."
+- for a subagent or a cloud task, in place of the after-merge parts of `next` and finish-work: "Arm auto-merge
+  and don't wait for it; I watch it to merged. A follow-up the item isn't finished without goes in this pull
+  request; file each other one as an entry and start none. Your final report names the pull request and each
+  filed follow-up. Then END, no monitors, no polls."
 
 A subagent has no Workflow tool, so a review level that fans out (high and above) can't start inside it. When
 its branch needs one, launch `/code-review <level> <pr>` yourself, with the instructions the repo's review rules

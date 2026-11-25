@@ -4,13 +4,13 @@ description:
   Do the next piece of work in this repo, start to merged. Use for "do the next thing", "fix the next bug",
   "take the next item". To only ask what comes next, use orient. Takes next-item's item (your own claim, else the
   top free defect, else the top free item, else a cleanup), proves and claims it through start-work, builds it
-  test first, and lands it through finish-work.
+  test first, lands it through finish-work, then does the follow-ups it filed.
 ---
 
 # Do the next thing
 
-The repo's standing work loop. `next-item` decides what comes next; this skill does it. Don't keep an order of
-your own here or in the repo's docs: when the order is wrong, fix the README section or the todo file that
+The repo's standing work loop. `next-item` decides what comes next; this skill does it. The one exception is
+your own follow-ups, which come first (step 6). Don't keep any other order of your own here or in the repo's docs: when the order is wrong, fix the README section or the todo file that
 `next-item` reads.
 
 ## 1. Ask `next-item`

@@ -106,6 +106,10 @@ stays on.
 3. **else the top free item**, with a warning when taking it goes over the repo's limit on work in progress;
 4. **else a cleanup**: delete code, fix a test or a doc.
 
+A session's own follow-ups come before all of these: the `next` skill does each one it filed, through
+`start-work`, before asking `next-item` again. `next-item` doesn't know which follow-ups are whose, since they
+carry no claim mark.
+
 Nothing blocks: the limit and the order are warnings and advice. When the repo doesn't say enough, `next-item`
 names what is missing and exits 2; it never guesses.
 
@@ -238,7 +242,7 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 | Skill           | Does                                                                                                                                             |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `orient`        | What changed on main, `next-item --list`, who else is working, open pull requests, one recommendation. Reads only                                |
-| `next`          | Takes `next-item`'s item and does it, start to merged, through `start-work` and `finish-work`                                                    |
+| `next`          | Takes `next-item`'s item and does it, start to merged, through `start-work` and `finish-work`, then the follow-ups it filed                      |
 | `start-work`    | Proves the item is still open and clear of open pull requests, makes the branch, commits the claim mark, opens the draft pull request            |
 | `finish-work`   | Removes the entry in the work's pull request, files follow-ups and does them next, runs the gates, marks it ready; after merge, cleans up        |
 | `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `next-item merged`. Dry run by default                                  |
