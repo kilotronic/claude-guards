@@ -197,7 +197,7 @@ repo's own checks of its entries read it as before:
   its number, its author and the mark's holder. finish-work deletes the entry in the same pull request, and the
   claim holds until it merges.
 - **Merged:** the entry is gone from the default branch, so the item is too. **Closed without merging:** the
-  item is free again.
+  item is free again, unless a batch pull request carries its mark (below).
 - **Ties are settled on GitHub.** `next-item claim` refuses an item an open pull request already marks. Two
   sessions can still both pass that check in the seconds before either pull request opens, so start-work runs
   `next-item claim` again once its pull request is open. The lower pull request number wins: the higher one gets

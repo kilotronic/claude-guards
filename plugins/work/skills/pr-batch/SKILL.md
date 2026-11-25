@@ -36,7 +36,8 @@ progress: see "not being changed" in step 1.
 
 `$ARGUMENTS`: `[N | <pr> <pr> ...] [--dry-run]`
 
-- `N` (default **10**): take the N oldest eligible pull requests. A list of numbers takes exactly those, still
+- `N` (default **10**, at most **15**): take the N oldest eligible pull requests. (`next-item` looks back 20
+  commits on a branch for a claim mark, so a larger batch would lose the claims its first commit carries.) A list of numbers takes exactly those, still
   checked for eligibility; a number in the list whose author is someone else counts as named. Say which were
   refused and why.
 - `--dry-run`: build and check the combined branch on this machine. Push nothing, change nothing on GitHub, and
@@ -89,12 +90,14 @@ Add each pull request your person named by number (`gh pr view <n> --json ...` w
 - its base is `main`, or it is **stacked**: its base is the head branch of another eligible pull request, which
   is itself on `main` or stacked the same way. Any other base: leave it out;
 - **not being changed.** Its head commit is older than 5 minutes
-  (`gh api repos/{owner}/{repo}/commits/<sha> --jq .commit.committer.date`), and no recent comment says someone
-  is working on it. Another session rebasing, fixing or landing it would fight you. Name each one skipped this
+  (`gh api repos/{owner}/{repo}/commits/<sha> --jq .commit.committer.date`), the pull request wasn't updated in
+  the last 5 minutes either (`updatedAt`: a push of an older commit), and no recent comment says someone is
+  working on it. Another session rebasing, fixing or landing it would fight you. Name each one skipped this
   way;
 - **finished.** In a todo-file repo, an original that claims an entry deletes it in its last commit
   (finish-work). One whose branch still has its marked entry isn't done: leave it out;
-- if auto-merge is armed, **no conflict with `main`**. An armed pull request that conflicts stays with its owner:
+- if auto-merge is armed, **no conflict with `main`** (`mergeable` is `MERGEABLE`; `UNKNOWN` means GitHub hasn't
+  worked it out yet: `gh pr view <n> --json mergeable` once more, and still unknown counts as a conflict). An armed pull request that conflicts stays with its owner:
   tell the owning session, or comment on the pull request. Never resolve an armed pull request's conflicts with
   `main` yourself;
 - no **required** check failed on its head (a red pull request poisons the batch; leave it to its owner).
@@ -128,7 +131,8 @@ its squash deletes the entry outright, so once the originals close no open pull 
 and `next-item` would offer the item as free while the batch is open. So first put each original's claim mark on
 its entry (`next-item --list` shows the claims and their pull requests) and commit that as
 `chore: carry the batched pull requests' claims`. Each original's squash then conflicts on its entry's line:
-that conflict is expected, and resolves by deleting the entry, as the original did.
+that conflict is expected, and resolves by deleting that entry, as the original did, while keeping every other
+line the original changed in the same place (a follow-up entry it added, say).
 
 **One commit per original**, oldest first (a stack bottom first), the way a squash merge would have made it:
 
@@ -147,6 +151,9 @@ conflict:
 git merge-base --is-ancestor <head of the one below> <head sha>   # the stack holds together
 git diff --binary <head of the one below> <head sha> | git apply --3way --index
 ```
+
+If the stack doesn't hold together (the one below was pushed again since), drop that pull request and those
+stacked on it: its diff would undo the newer changes below it.
 
 An empty squash means the pull request already landed meanwhile: drop it.
 
@@ -229,8 +236,9 @@ originals' authors as co-authors; its pull request keeps one commit per original
 `gh pr view <combined> --json state,mergeStateStatus`. Armed is not merged. If it reads `BEHIND` (another pull
 request landed first) or conflicts, disarm (`gh pr merge <combined> --disable-auto`), `git rebase origin/main`,
 rerun the quick checks, `git push --force-with-lease`, re-arm as above and wait once more; conflicts resolved by
-hand go back through the review. At each look, compare each original's head SHA with the recorded one: a moved
-head means its owner took it back. Say so on the combined pull request, and leave that original out of step 5.
+hand go back through the review. At each look, read each original
+(`gh pr view <n> --json state,headRefOid,autoMergeRequest`): reopened, re-armed, or a head that moved from the
+recorded one means its owner took it back. Say so on the combined pull request, and leave that original out of step 5.
 
 ## 4. On failure: one repair, then give up
 
@@ -263,10 +271,12 @@ git log origin/main --oneline --grep "(#<n>)"
 gh pr comment <n> --body "Landed in #<combined> as <sha>."
 ```
 
-Reopen (and comment on) any original whose head moved or whose work is not on `main`. A pull request dropped from
+Reopen (and comment on) any original whose work is not on `main`; one its owner took back is theirs. A pull request dropped from
 the batch after it was closed is reopened as soon as it is dropped, with the reason. Re-point each open pull
 request stacked above the batch's top onto `main` (`gh pr edit <n> --base main`). Other sessions may still have a
-worktree on an original's branch; leave those to their owners.
+worktree on an original's branch; leave those to their owners. A closed original's branch never counts as merged
+for `next-item merged` or branch-prune, so delete the branch on GitHub of each landed original of your own with no
+open pull request based on it (`git push origin --delete <head>`); someone else's is theirs to delete.
 
 Clean up as the `pr` skill's M4 says: `next-item merged <batch branch>`, then remove the batch worktree and
 `git branch -D` its branch. Report the merged commit, each original's fate, and anything the merge starts on
