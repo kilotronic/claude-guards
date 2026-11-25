@@ -279,8 +279,8 @@ def test_claiming_a_row_that_waits_on_another_is_refused(tmp_path: Path) -> None
 
 
 def test_waits_on_reads_only_row_numbers_before_a_check() -> None:
-    import goal
+    import next_item
 
-    assert goal._waits("3, check: run 12") == (3,)
-    assert goal._waits("7–9 (needs the bell), 12") == (7, 8, 9, 12)
-    assert goal._waits("—") == ()
+    assert next_item._waits("3, check: run 12") == (3,)
+    assert next_item._waits("7–9 (needs the bell), 12") == (7, 8, 9, 12)
+    assert next_item._waits("—") == ()

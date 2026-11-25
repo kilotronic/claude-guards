@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import goal
+import next_item
 import pytest
 from workrun import IDENTITY, git, make_project
 
@@ -94,7 +94,7 @@ def test_a_branch_name_that_looks_like_an_option_is_refused(tmp_path: Path) -> N
     p = make_project(tmp_path)
     args = argparse.Namespace(branch="-x", C=str(p.clone), no_fetch=True)
     with pytest.raises(RuntimeError, match="not a branch name"):
-        goal.merged(args)
+        next_item.merged(args)
 
 
 def test_a_local_branch_behind_a_squash_merged_one_is_merged(tmp_path: Path) -> None:

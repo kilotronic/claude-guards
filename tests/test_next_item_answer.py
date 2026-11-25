@@ -156,15 +156,42 @@ def test_no_milestone_and_no_goals_file_is_unclear(tmp_path: Path) -> None:
     assert any("milestone" in m for m in out["missing"])
 
 
-def test_a_goals_file_stands_in_for_the_milestone(tmp_path: Path) -> None:
+def test_a_milestone_linking_a_file_names_it_as_the_goals_file(tmp_path: Path) -> None:
+    readme = README.replace(
+        "- **Current milestone:** M2, the phone app. **Done when:** a timer rings on a locked phone. **By:** no date\n",
+        "- **Current milestone:** see [the goals](docs/goals/goals.md), the first one not done\n",
+    )
+    p = make_project(
+        tmp_path, readme=readme, extra={"docs/goals/goals.md": "# Goals\n"}
+    )
+    rc, out, _ = p.run()
+    assert rc == 0, out
+    assert out.splitlines()[0] == "milestone: see docs/goals/goals.md"
+    rc, js = p.json()
+    assert rc == 0
+    assert js["goal"]["goals_file"] == "docs/goals/goals.md"
+    assert js["goal"]["milestone"] is None
+
+
+def test_a_plain_text_milestone_is_the_milestone_with_no_goals_file(
+    tmp_path: Path,
+) -> None:
+    p = make_project(tmp_path)
+    rc, out = p.json()
+    assert rc == 0
+    assert out["goal"]["milestone"] == "M2, the phone app"
+    assert out["goal"]["goals_file"] is None
+
+
+def test_a_goals_line_no_longer_stands_in_for_the_milestone(tmp_path: Path) -> None:
     readme = README.replace(
         "- **Current milestone:** M2, the phone app. **Done when:** a timer rings on a locked phone. **By:** no date\n",
         "- **Goals:** [docs/goals.md](docs/goals.md)\n",
     )
     p = make_project(tmp_path, readme=readme, extra={"docs/goals.md": "# Goals\n"})
-    rc, out, _ = p.run()
-    assert rc == 0, out
-    assert "milestone: see docs/goals.md" in out
+    rc, out = p.json()
+    assert rc == 2
+    assert any("Current milestone" in m for m in out["missing"])
 
 
 def test_a_milestone_past_its_date_is_unclear(tmp_path: Path) -> None:

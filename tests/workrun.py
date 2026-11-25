@@ -19,7 +19,6 @@ from pathlib import Path
 
 WORK = Path(__file__).resolve().parents[1] / "plugins" / "work"
 NEXT_ITEM = WORK / "bin" / "next-item"
-GOAL = WORK / "bin" / "goal"  # the old name, kept as an alias for now
 sys.path.insert(0, str(WORK / "scripts"))
 
 README = """\

@@ -122,8 +122,7 @@ in progress: 0 of 2
 
 `next-item --list` adds every free item in order and every claim, and `--json` gives the same for scripts. Exit
 codes: 0 an answer, 1 an error, 2 unclear, 3 no (the item is someone else's, or a branch is not merged). The
-plugin puts `next-item` on the Bash tool's `PATH`; outside Claude Code, run `plugins/work/bin/next-item`. Its old name, `goal`, still runs it for now: it
-says on stderr that it is now `next-item`, then answers the same. It goes away in a later release.
+plugin puts `next-item` on the Bash tool's `PATH`; outside Claude Code, run `plugins/work/bin/next-item`. Its old name, `goal`, was removed in work 2.0.0: call `next-item`.
 
 ### What the repo states
 
@@ -149,8 +148,11 @@ has them, else by a few `gh` steps (start-work's "Work kept in GitHub issues"). 
 issues, nothing on it is taken for a todo file, and a link to a web address never is. A line that names
 neither is unclear, and `next-item` says so.
 
-For a todo file, `next-item` needs the file, the limit, and either the milestone or a `**Goals:**` line linking the
-file that states it. For GitHub issues it needs neither the limit nor a milestone, and reads no
+For a todo file, `next-item` needs the file, the limit, and the milestone. A `**Current milestone:**` that links
+a file (for example `- **Current milestone:** see [the goals](docs/goals.md)`) points to the goals file that
+states it, and `next-item` answers `milestone: see docs/goals.md`; a backticked name or a web link is read as
+part of the milestone's name. (The separate `**Goals:**` line was removed in work 2.0.0; move its link into
+`**Current milestone:**`.) For GitHub issues it needs neither the limit nor a milestone, and reads no
 `.claude/work.toml`; a milestone it does state is checked as below. A milestone whose By date has passed is unclear. A frozen repo has one line instead:
 `- **Frozen:** new work goes to <repo>.`
 
