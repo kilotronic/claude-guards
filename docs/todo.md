@@ -4,6 +4,14 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 
 ## Defects
 
+- **The stash guard calls `git rebase --autostash` safe, but a conflict puts the changes in the shared stash.**
+  Its refusal says the autostash "lives in this worktree's own rebase dir, so it cannot race". That holds
+  until the changes fail to re-apply after the rebase: git then keeps them as `stash@{0}: autostash` in
+  `refs/stash`, the one ref every worktree shares, and tells you to `git stash pop` them or `git reset --hard`,
+  both of which guards refuse. Seen 2026-11-25, rebasing uncommitted work over the claim commit, which changed
+  the same `docs/todo.md` lines. Shape: advise committing first (a work-in-progress commit, or a patch) instead
+  of `--autostash`.
+
 - **The stash guard doesn't say why a `no-commit-on-main` override was ignored.** With `no-stash` locked, a
   repo's `no-commit-on-main` override no longer turns the guard off, but the refusal's note only reads
   `no-stash`, so it gives no reason. And a repo that turns `no-commit-on-main` off can keep the stash guard
