@@ -4,7 +4,7 @@ Two [Claude Code](https://code.claude.com) plugins for agents working in a repos
 
 - **guards**: hooks that stop risky git, GitHub and shell commands before an agent runs them. Each refusal says
   why and what to do instead, so the agent can fix its own command and carry on.
-- **work**: the `goal` command, which answers "what should I work on next?" from what the repo states in
+- **work**: the `next-item` command, which answers "what should I work on next?" from what the repo states in
   writing; the skills that claim an item, build it and land it (`pr` opens the pull request and has a fresh
   agent review it); `long-loops` and `add-knowledge`; hooks around merging; and a hook that offers to share what
   Claude saves to memory. See [The work plugin](#the-work-plugin).
@@ -98,26 +98,27 @@ stays on.
 
 ## The work plugin
 
-`goal` reads the repo's working copy, so goals edited locally count right away, and answers in a fixed order:
+`next-item` reads the repo's working copy, so goals edited locally count right away, and answers in a fixed order:
 
 1. **your own claimed item**: finish it before starting another;
 2. **else the top free defect**, one defect fix at a time;
 3. **else the top free item**, with a warning when taking it goes over the repo's limit on work in progress;
 4. **else a cleanup**: delete code, fix a test or a doc.
 
-Nothing blocks: the limit and the order are warnings and advice. When the repo doesn't say enough, `goal`
+Nothing blocks: the limit and the order are warnings and advice. When the repo doesn't say enough, `next-item`
 names what is missing and exits 2; it never guesses.
 
 ```text
-$ goal
-goal: M2, the phone app (done when: a timer rings on a locked phone)
+$ next-item
+milestone: M2, the phone app (done when: a timer rings on a locked phone)
 next: fix "The timer skips a second" (docs/todo.md line 5): the top free defect; defects come before anything new
 in progress: 0 of 2
 ```
 
-`goal --list` adds every free item in order and every claim, and `--json` gives the same for scripts. Exit
+`next-item --list` adds every free item in order and every claim, and `--json` gives the same for scripts. Exit
 codes: 0 an answer, 1 an error, 2 unclear, 3 no (the item is someone else's, or a branch is not merged). The
-plugin puts `goal` on the Bash tool's `PATH`; outside Claude Code, run `plugins/work/bin/goal`.
+plugin puts `next-item` on the Bash tool's `PATH`; outside Claude Code, run `plugins/work/bin/next-item`. Its old name, `goal`, still runs it for now: it
+says on stderr that it is now `next-item`, then answers the same. It goes away in a later release.
 
 ### What the repo states
 
@@ -129,21 +130,21 @@ The facts live in the README, where people read them too, under one heading, as 
 - **Mission:** <who this is for and what it does for them>
 - **Current milestone:** <name>. **Done when:** <a finish line a person can check>. **By:** <date, or "no date">
 - **Work is recorded in:** `docs/todo.md`
-- **Claim before starting:** `goal claim '<the entry's title>'` as the work branch's first commit, with its pull request opened at once, as a draft
+- **Claim before starting:** `next-item claim '<the entry's title>'` as the work branch's first commit, with its pull request opened at once, as a draft
 - **Work in progress:** at most <N> at once; defect fixes one at a time
 - **Defects first:** the Defects section is fixed, top first, before anything new
 ```
 
-**The record of work** is what the `**Work is recorded in:**` line names, and `goal` says which (`record` in
+**The record of work** is what the `**Work is recorded in:**` line names, and `next-item` says which (`record` in
 `--json`). A todo file, in backticks or a link, is read as below. A line that starts with "GitHub issues"
 instead (for example `- **Work is recorded in:** GitHub issues on the team board`) gets `record: issues` and no
 item: the
 skills then find, claim and finish work through issues, by the repo's own issue-tracking skill or rules when it
 has them, else by a few `gh` steps (start-work's "Work kept in GitHub issues"). On a line that starts with GitHub
 issues, nothing on it is taken for a todo file, and a link to a web address never is. A line that names
-neither is unclear, and `goal` says so.
+neither is unclear, and `next-item` says so.
 
-For a todo file, `goal` needs the file, the limit, and either the milestone or a `**Goals:**` line linking the
+For a todo file, `next-item` needs the file, the limit, and either the milestone or a `**Goals:**` line linking the
 file that states it. For GitHub issues it needs neither the limit nor a milestone, and reads no
 `.claude/work.toml`; a milestone it does state is checked as below. A milestone whose By date has passed is unclear. A frozen repo has one line instead:
 `- **Frozen:** new work goes to <repo>.`
@@ -151,7 +152,7 @@ file that states it. For GitHub issues it needs neither the limit nor a mileston
 The todo file has a `## Defects` (or `## Bugs`) heading and a `## Next` heading, each a list of entries,
 top first, each a line starting with a dash. An entry's title is its bold lead (a leading `(size, tag)` is dropped), else its first sentence.
 `###` subheadings belong to the section above them. An entry containing `(owner)` needs the owner: it is
-listed apart, and `goal claim` refuses it.
+listed apart, and `next-item claim` refuses it.
 
 An optional `.claude/work.toml` sets format details:
 
@@ -167,10 +168,10 @@ rows_sections = ["ios=Next"]          # rows of Phase ios come just before Next'
 ```
 
 **A plan kept as row files.** With `rows`, the folder holds only row files: each `<n>.md` holds one markdown
-table row under its header, with `#` and `Step` columns (and optionally `Home`, `Phase` and `Waits on`). `goal` offers each row as an
+table row under its header, with `#` and `Step` columns (and optionally `Home`, `Phase` and `Waits on`). `next-item` offers each row as an
 item titled `<rows_name> <n>`, placed by its Phase through `rows_sections` (no match: after every section). A row
 whose `Waits on` names a row still in the folder (comma-separated `3`, `7–9` or `3 (why)`, before any `check: …`
-part) isn't free, and `goal claim` refuses it, and a row it waits on moves up to its section. A row containing a `skip` text needs the owner. A row is
+part) isn't free, and `next-item claim` refuses it, and a row it waits on moves up to its section. A row containing a `skip` text needs the owner. A row is
 claimed by a mark at the end of its table line, the same way as an entry, and built by deleting its file. A file
 that isn't one row numbered as its name, with a cell for each header column, is named as unclear (on an open
 pull request's branch it is left out). Rows come in number order.
@@ -185,39 +186,39 @@ repo's own checks of its entries read it as before:
 - **Add a snooze button.** Five more minutes. [claimed by session-1a2b3c4d on laptop, 2026-11-22]
 ```
 
-- **Starting:** on the work's new branch, `goal claim '<title>'` commits the mark, touching only that line.
+- **Starting:** on the work's new branch, `next-item claim '<title>'` commits the mark, touching only that line.
   Push the branch and open the work's pull request at once, as a draft (`gh pr create --draft`), with auto-merge
   not armed. No separate pull request has to merge first, and the work starts right away. A draft holds the item
   like any open pull request; finish-work marks it ready (`gh pr ready`) when the work is done, then arms
   auto-merge.
-- **An item is in progress while an open pull request carries its mark.** `goal` asks GitHub for the open pull
+- **An item is in progress while an open pull request carries its mark.** `next-item` asks GitHub for the open pull
   requests into the default branch, as GitHub names it (`gh repo view`), not the local `origin/HEAD`, which
   can be stale. It reads the todo file on each one's branch. The claim is that pull request's, named with
   its number, its author and the mark's holder. finish-work deletes the entry in the same pull request, and the
   claim holds until it merges.
 - **Merged:** the entry is gone from the default branch, so the item is too. **Closed without merging:** the
   item is free again.
-- **Ties are settled on GitHub.** `goal claim` refuses an item an open pull request already marks. Two
+- **Ties are settled on GitHub.** `next-item claim` refuses an item an open pull request already marks. Two
   sessions can still both pass that check in the seconds before either pull request opens, so start-work runs
-  `goal claim` again once its pull request is open. The lower pull request number wins: the higher one gets
-  exit 3 naming the winner, and closes itself with a comment pointing at it. `goal` names both pull requests
+  `next-item claim` again once its pull request is open. The lower pull request number wins: the higher one gets
+  exit 3 naming the winner, and closes itself with a comment pointing at it. `next-item` names both pull requests
   while both are open, and tells the later one to stop.
 - **Releasing:** to drop the work, close its pull request (a mark on the default branch needs a merged
-  `goal release`, below). To go on under another item, run
-  `goal release '<title>'`, which commits the mark away on the branch, then `goal claim` on the other one.
+  `next-item release`, below). To go on under another item, run
+  `next-item release '<title>'`, which commits the mark away on the branch, then `next-item claim` on the other one.
 - A mark only in your working copy is not counted until its pull request opens. A mark on the default branch,
   made before claims moved to pull requests, still holds (and holds first) until the work deletes its entry, or
-  its holder removes it; the owner can with `goal release '<title>' --holder <their label>`. It goes stale by
+  its holder removes it; the owner can with `next-item release '<title>' --holder <their label>`. It goes stale by
   its date. A pull request from a fork never holds an item.
-- If GitHub can't be reached, `goal` says claims weren't checked and answers from the local files, taking
-  their marks as they are. `goal claim` refuses until GitHub answers.
+- If GitHub can't be reached, `next-item` says claims weren't checked and answers from the local files, taking
+  their marks as they are. `next-item claim` refuses until GitHub answers.
 - **In progress** is the number of items claimed this way, so it is stated in one place.
-- **Stale:** a claim whose pull request has had no activity for 3 days is flagged by `goal`. It is never
+- **Stale:** a claim whose pull request has had no activity for 3 days is flagged by `next-item`. It is never
   removed by itself.
 
 Who you are comes from `--as`, else `$GOAL_AS`, else the Claude Code session, plus the machine's name
 (`$GOAL_MACHINE` overrides it). With none of these, every session of the login shares one name, so
-`goal claim` refuses and `goal` warns. A session label changes with each session, so to keep a claim yours across
+`next-item claim` refuses and `next-item` warns. A session label changes with each session, so to keep a claim yours across
 sessions, set a stable `$GOAL_AS`. The mark is public wherever the todo file is: in a public repo, set
 `$GOAL_MACHINE` and `$GOAL_AS` to names you are happy to publish.
 
@@ -225,18 +226,18 @@ On a work branch, a pull request's claim is yours only when it comes from that b
 name (subagents of one session, or one stable `$GOAL_AS`), never a branch. On the default branch, and for a mark
 on the default branch, the name decides.
 
-`goal merged <branch>` says whether a branch's work is on main: every commit there as the same patch, or a
+`next-item merged <branch>` says whether a branch's work is on main: every commit there as the same patch, or a
 merged pull request ending at the branch's tip, as a squash merge leaves it.
 
 ### The skills
 
 | Skill           | Does                                                                                                                                         |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `orient`        | What changed on main, `goal --list`, who else is working, open pull requests, one recommendation. Reads only                                 |
-| `next`          | Takes `goal`'s item and does it, start to merged, through `start-work` and `finish-work`                                                     |
+| `orient`        | What changed on main, `next-item --list`, who else is working, open pull requests, one recommendation. Reads only                            |
+| `next`          | Takes `next-item`'s item and does it, start to merged, through `start-work` and `finish-work`                                                |
 | `start-work`    | Proves the item is still open, makes the branch, commits the claim mark and opens the work's draft pull request, says what done means        |
 | `finish-work`   | Removes the entry in the work's pull request, files follow-ups, runs the gates, marks it ready; after merge, cleans up                       |
-| `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default                                   |
+| `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `next-item merged`. Dry run by default                              |
 | `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                      |
 | `pr`            | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed                |
 | `add-knowledge` | Moves a memory Claude saved into the file every session reads (a repo's CLAUDE.md or the team's rules) by pull request, or marks it personal |
@@ -297,7 +298,7 @@ at a usage limit` (without the commit hooks, which can't run there; new files st
   labeled `parked`. `park resume <n>` takes the label off, so the work is yours, and says how to check out its
   branch; on the same machine, `claude --resume <session id>` from the comment continues the session itself.
   Taking a label off is not atomic, so two sessions can rarely both take the same work. The comments name the
-  machine as `$GOAL_MACHINE` when it is set, as `goal` does.
+  machine as `$GOAL_MACHINE` when it is set, as `next-item` does.
 
 ## Development
 
@@ -308,7 +309,7 @@ claude plugin validate .      # the plugin and marketplace manifests
 ```
 
 Each test runs the hooks the way Claude Code runs them, with a JSON event on stdin. A refusal exits with
-code 2 and writes its reason to stderr. Add a test that fails before you change a guard. The `goal` tests
+code 2 and writes its reason to stderr. Add a test that fails before you change a guard. The `next-item` tests
 build a made-up project with a local `origin` and a stand-in `gh`, so none reaches GitHub.
 
 To release a plugin, raise `version` in its `plugin.json`. When that lands on main, the `tag-releases`

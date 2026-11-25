@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-"""goal: what to work on next in this repo, from what the repo states in writing.
+"""next-item: what to work on next in this repo, from what the repo states in writing. (This file keeps the
+command's old name, goal; `goal` still runs it, with a notice, until a later release.)
 
 It reads, from the working copy (so goals edited locally count right away):
 
 - the README's `## How work runs here` section: the milestone or goals file, the todo file and the limit on
-  work in progress. When its **Work is recorded in:** line names GitHub issues rather than a todo file, goal
+  work in progress. When its **Work is recorded in:** line names GitHub issues rather than a todo file, next-item
   answers `record: issues` with no item, and the skills work through the issues;
 - the todo file: its Defects and Next sections, top first, and the claim marks on their entries;
 - `.claude/work.toml`, optional: other heading names, entries that need the owner, the merge method, and a
@@ -15,7 +16,7 @@ It reads, from the working copy (so goals edited locally count right away):
 Claims are the exception: the work's own pull request is the claim. An item is in progress while an open pull
 request into the default branch, found by asking GitHub (`gh repo view`, not the local `origin/HEAD`, which can be
 stale), carries a claim mark on the item's line. A mark on the default branch, from before claims moved to pull
-requests, still counts; a mark only the working copy has is reported and not counted. When GitHub can't be reached, goal says claims weren't checked and answers
+requests, still counts; a mark only the working copy has is reported and not counted. When GitHub can't be reached, next-item says claims weren't checked and answers
 from the local files alone.
 
 Then it answers in a fixed order: your own claimed item; else the top free defect, one fix at a time; else the
@@ -23,8 +24,8 @@ top free Next item, with a warning when that goes over the limit; else a cleanup
 limit and the order are warnings and advice. When the repo doesn't say enough, it names what is missing and
 exits 2; it never guesses.
 
-`goal claim` commits the mark on one entry's line as the work branch's first commit; the claim holds once the
-work's pull request is open. `goal release` commits the mark away. `goal merged <branch>` says whether a branch's
+`next-item claim` commits the mark on one entry's line as the work branch's first commit; the claim holds once the
+work's pull request is open. `next-item release` commits the mark away. `next-item merged <branch>` says whether a branch's
 work is on main.
 
 Exit codes: 0 an answer, 1 an error, 2 unclear (what is missing is named), 3 no (the item is someone else's,
@@ -75,7 +76,7 @@ class Settings:
     defects: list[str] = field(default_factory=lambda: ["Defects", "Bugs"])
     next: list[str] = field(default_factory=lambda: ["Next"])
     skip: list[str] = field(default_factory=lambda: ["(owner)"])
-    merge_method: str = "squash"  # how the pr skill merges; goal only checks it
+    merge_method: str = "squash"  # how the pr skill merges; next-item only checks it
     branch_prefix: str = "work/"
     named_defects: bool = False  # true when the settings file named the defects heading
     rows: str = ""  # a folder of row files, `<n>.md`, each one markdown table row under its header
@@ -701,7 +702,7 @@ class Repo:
             )
         if not self.has_ref:
             raise RuntimeError(
-                f"no {self.ref}: run goal in a clone whose origin has a default branch"
+                f"no {self.ref}: run next-item in a clone whose origin has a default branch"
             )
 
     def _github_base(self) -> str | None:
@@ -1037,7 +1038,7 @@ def load(
             f"{goal_info['milestone'] or 'the milestone'} was due {by}: is it still the milestone, with a new date?"
         )
     if issues:
-        # The repo keeps its work in GitHub issues: goal has no list or limit to read, and says so. A milestone it
+        # The repo keeps its work in GitHub issues: next-item has no list or limit to read, and says so. A milestone it
         # states is still checked.
         if missing:
             return None, goal_info, missing
@@ -1176,7 +1177,7 @@ def answer(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
         for t in state.uncounted
     ] + [
         f'"{t}" is held by a mark on {repo.ref}, made before claims moved to pull requests: it counts until the'
-        " work deletes the entry, or its holder (or the owner, with goal release --holder) removes the mark"
+        " work deletes the entry, or its holder (or the owner, with next-item release --holder) removes the mark"
         for t in state.on_base
     ]
     out["conflicts"] = []
@@ -1195,7 +1196,7 @@ def answer(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
         )
         out["warnings"] += [
             f'you hold the later claim on "{title}" in #{c.pr}: stop, and close it, or move its work to another'
-            " item with goal release"
+            " item with next-item release"
             for c in later
             if me.holds(c)
         ]
@@ -1252,10 +1253,10 @@ def render(out: dict) -> str:
         if g.get("by") and g["by"] != "no date":
             bits.append(f"by {g['by']}")
         lines.append(
-            f"goal: {g['milestone']}" + (f" ({'; '.join(bits)})" if bits else "")
+            f"milestone: {g['milestone']}" + (f" ({'; '.join(bits)})" if bits else "")
         )
     elif g.get("goals_file"):
-        lines.append(f"goal: see {g['goals_file']}")
+        lines.append(f"milestone: see {g['goals_file']}")
     n = out["next"]
     if out.get("record") == "issues":
         lines += [f"record: {g['recorded_in']}", f"next: {n['reason']}"]
@@ -1279,7 +1280,7 @@ def render(out: dict) -> str:
                 if c.get("pr")
                 else (
                     f'stale: "{c["title"]}" claimed by {c["who"]} on {c["machine"]}, {c["date"]}, by a mark on the'
-                    f" default branch: {STALE_DAYS} days old (flagged only; its holder, or the owner with goal"
+                    f" default branch: {STALE_DAYS} days old (flagged only; its holder, or the owner with next-item"
                     " release --holder, removes the mark)"
                 )
             )
@@ -1334,7 +1335,7 @@ def _work_branch(repo: Repo, verb: str) -> str:
     name = repo.branch_name()
     if not name or name == repo.base:
         raise RuntimeError(
-            f"the mark goes on the work's own branch: run goal {verb} in the work's worktree, not on"
+            f"the mark goes on the work's own branch: run next-item {verb} in the work's worktree, not on"
             f" {name or 'a detached HEAD'}"
         )
     return name
@@ -1346,7 +1347,7 @@ def _commit(repo: Repo, path: str, text: str, subject: str, body: str) -> None:
     target = repo.root / path
     if target.is_symlink() or not target.resolve().is_relative_to(repo.root.resolve()):
         raise RuntimeError(
-            f"{path} is a link or outside the repo: goal only writes a plain file"
+            f"{path} is a link or outside the repo: next-item only writes a plain file"
         )
     if run(
         ["git", "diff", "--quiet", "HEAD", "--", path], repo.root, check=False
@@ -1607,7 +1608,7 @@ def merged(args: argparse.Namespace) -> tuple[int, dict]:
 
 def _common(suppress: bool) -> argparse.ArgumentParser:
     """The shared options. The subcommands' copies default to SUPPRESS, so an option typed before the subcommand
-    (`goal --json claim X`) is not overwritten by the copy's default."""
+    (`next-item --json claim X`) is not overwritten by the copy's default."""
     c = argparse.ArgumentParser(add_help=False)
 
     def d(value: object) -> object:
@@ -1655,7 +1656,7 @@ def build_parser() -> argparse.ArgumentParser:
     common = _common(suppress=False)
     sub_common = _common(suppress=True)
     p = argparse.ArgumentParser(
-        prog="goal",
+        prog="next-item",
         parents=[common],
         description="What to work on next in this repo. Exit 0 an answer, 1 an error, 2 unclear, 3 no.",
     )
@@ -1694,7 +1695,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         today = dt.date.fromisoformat(args.today) if args.today else dt.date.today()
     except ValueError:
-        print("goal: --today is YYYY-MM-DD", file=sys.stderr)
+        print("next-item: --today is YYYY-MM-DD", file=sys.stderr)
         return ERROR
     try:
         if args.command == "claim":
@@ -1712,7 +1713,7 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as e:
         if args.json:
             print(json.dumps({"status": "error", "message": str(e)}))
-        print(f"goal: {e}", file=sys.stderr)
+        print(f"next-item: {e}", file=sys.stderr)
         return ERROR
     if args.json:
         print(json.dumps(out, indent=2))

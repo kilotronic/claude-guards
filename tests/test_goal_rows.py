@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""A plan kept as row files: `goal` offers its open rows with the todo entries, and the work's own pull request
+"""A plan kept as row files: `next-item` offers its open rows with the todo entries, and the work's own pull request
 claims a row the way it claims an entry, by a mark on the row's line."""
 
 from __future__ import annotations

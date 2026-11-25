@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""goal's readers: the README section, the todo file, the claim mark and the settings file. All pure."""
+"""next-item's readers: the README section, the todo file, the claim mark and the settings file. All pure."""
 
 from __future__ import annotations
 

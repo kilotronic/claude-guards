@@ -2,21 +2,21 @@
 name: next
 description:
   Do the next piece of work in this repo, start to merged. Use for "do the next thing", "fix the next bug",
-  "take the next item". To only ask what comes next, use orient. Takes goal's item (your own claim, else the
+  "take the next item". To only ask what comes next, use orient. Takes next-item's item (your own claim, else the
   top free defect, else the top free item, else a cleanup), proves and claims it through start-work, builds it
   test first, and lands it through finish-work.
 ---
 
 # Do the next thing
 
-The repo's standing work loop. `goal` decides what comes next; this skill does it. Don't keep an order of
+The repo's standing work loop. `next-item` decides what comes next; this skill does it. Don't keep an order of
 your own here or in the repo's docs: when the order is wrong, fix the README section or the todo file that
-`goal` reads.
+`next-item` reads.
 
-## 1. Ask `goal`
+## 1. Ask `next-item`
 
 ```bash
-goal
+next-item
 ```
 
 Take what it names, unless the user named an item; don't stop to offer it.
@@ -29,9 +29,9 @@ Take what it names, unless the user named an item; don't stop to offer it.
 - **issues** (`record: issues`): the repo keeps its work in GitHub issues. Find, claim and finish one as
   [start-work's "Work kept in GitHub issues"](../start-work/SKILL.md#work-kept-in-github-issues) says; the
   steps below still apply, with that section in place of the todo-file steps.
-- **Exit 2** (unclear): relay what `goal` names as missing and ask the owner. Never pick something instead.
+- **Exit 2** (unclear): relay what `next-item` names as missing and ask the owner. Never pick something instead.
 - **`warning: you hold the later claim`**: another pull request marked that item first. Stop that work: close
-  your pull request, or move its work to another item (`/work:start-work` on it, after `goal release`).
+  your pull request, or move its work to another item (`/work:start-work` on it, after `next-item release`).
 
 ## 2. Start it
 

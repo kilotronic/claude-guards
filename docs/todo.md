@@ -37,7 +37,7 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
   `park resume` says "is yours" even when taking the label off fails (no write access); a new folder counts as one
   untracked file. Shape: commit only tracked paths (`git commit -- $(git diff --name-only HEAD)`), check the label
   edit's exit code, count with `git ls-files --others --exclude-standard`.
-- **`goal`'s row reading is quiet about slips.** A `rows` folder that doesn't exist shows no rows and no warning; a
+- **`next-item`'s row reading is quiet about slips.** A `rows` folder that doesn't exist shows no rows and no warning; a
   `Waits on` part that isn't a number or a span is skipped; a phase mapped to the defects heading goes last; a bad
   claim date on a row names the todo file, not the row file. Shape: name each as unclear or a warning.
 - **The daily memory list can be used up by a session nobody reads.** A scripted `claude -p` run or a scheduled
@@ -62,33 +62,41 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
   quotes, so a subject like `--subject "feat: x (#17)"` gets no allow; and a short flag with its value
   attached that contains an F (`-RAcmeFoo/app`, `-tFix`) reads as `-F`. Both fail safe: auto mode blocks the
   merge as it would without the hook. Shape: read the words first, then check each unquoted part.
-- **goal follows the README's link to the goals file.** `**Goals:**` is reported as a path only; the milestone
-  and its finish line the linked file states are not read, so `goal` can't say when a milestone looks done.
-- **goal reads a plan's ordered rows, not only todo entries.** Repos that keep their order in a plan's table
+- **next-item follows the README's link to the goals file.** `**Goals:**` is reported as a path only; the milestone
+  and its finish line the linked file states are not read, so `next-item` can't say when a milestone looks done.
+- **next-item reads a plan's ordered rows, not only todo entries.** Repos that keep their order in a plan's table
   still need a second lister and a second kind of claim. Shape: a `.claude/work.toml` setting naming the plan's
   format.
 - **A warning hook on starting new work.** On a claim: warn when the repo is at its limit, when your own item
   is unfinished, or when a free defect is skipped. Warnings only.
-- **A Stop check: did the session move the goal?** Compare `goal`'s answer at the start and the end of a
+- **A Stop check: did the session move the goal?** Compare `next-item`'s answer at the start and the end of a
   session (a claim closed, a pull request merged, an entry gone); one advisory line.
 - **A reader for GitHub issues on a project board**, for repos that record work there instead of a todo file.
-- **A `report` skill**: progress against `goal`'s finish line, in plain words.
+- **A `report` skill**: progress against the milestone's finish line, as `next-item` reads it, in plain words.
 - **Stop reading claim marks on the default branch.** They hold only so that claims made before claims moved
-  to pull requests survive the upgrade. Once none are left, drop them, their warning and `goal release
+  to pull requests survive the upgrade. Once none are left, drop them, their warning and `next-item release
 --holder`, so open pull requests are the one place claims are read. `claims_from` in `--json` names the
   default branch, where it now means the branch the pull requests merge into.
-- **Sessions sharing a name in the main checkout share their claims.** Off a work branch, `goal` decides whose
+- **Sessions sharing a name in the main checkout share their claims.** Off a work branch, `next-item` decides whose
   claim it is by name, so two subagents of one session (one `session-` label) starting there are each told to
   "finish" the first one's item. Shape: say in the README and the next skill that parallel sessions each set
   their own `--as` or `$GOAL_AS`; have the "finish" answer give the pull request's real branch (`Claim.head`),
   not one built from the title; test the detached-HEAD case; drop the comment in `claim` that repeats
   `Me.holds`.
-- **Small gaps in goal found in review.** `gh repo view` follows gh's default repo, which in a fork clone can be the
+- **Small gaps in next-item found in review.** `gh repo view` follows gh's default repo, which in a fork clone can be the
   upstream, not origin; a claimed entry whose title is edited locally reads as a mark no pull request carries;
   claims are read from the first 200 open pull requests only; a branch that deleted a claimed entry is read back
   only 20 commits; a pull request stacked on another work branch counts as a second claim on its item; on the
-  work branch after finish-work deletes the entry, `goal` no longer answers "finish" for it; a claim is matched to
-  the local branch's name, so a local branch pushed under another name doesn't see its own pull request; `goal release` compares the holder's name, not the machine; on
+  work branch after finish-work deletes the entry, `next-item` no longer answers "finish" for it; a claim is matched to
+  the local branch's name, so a local branch pushed under another name doesn't see its own pull request; `next-item release` compares the holder's name, not the machine; on
   Python 3.9 and 3.10 a settings value with an apostrophe is refused; a heading inside a code block is read as
   a section, in the todo file and in the README (so this repo's own README example reads as its section); bytes that aren't UTF-8 elsewhere in the todo file are rewritten by a claim; a prose formatter or
   line-length rule can move or reject the mark at the end of a long line.
+- **Remove the `goal` alias once every repo calls `next-item`.** `goal` is the old name of `next-item`
+  (claude-guards' work plugin 1.8.0 added `next-item`); it prints a notice on stderr and answers the same. Some
+  repos that use the plugin still call `goal`. Once none does, delete `plugins/work/bin/goal` and its test, and
+  release a major version.
+- **Fold the README's `**Goals:**` line into `**Current milestone:**`.** `next-item` reads either: the milestone
+  line, or a `**Goals:**` line linking a goals file (answered as `milestone: see <file>`). Two keys for one fact.
+  Some repos still use `**Goals:**`, so it keeps working for now. Shape: let `**Current milestone:**` link a file,
+  switch the repos that use `**Goals:**`, then drop it.

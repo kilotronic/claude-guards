@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""goal reads the working copy; only claims come from GitHub, as the open pull requests into its default branch."""
+"""next-item reads the working copy; only claims come from GitHub, as the open pull requests into its default branch."""
 
 from __future__ import annotations
 

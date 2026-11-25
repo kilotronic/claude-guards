@@ -5,7 +5,7 @@ description:
   into the default branch. Rebase-safe (patch-equivalence via git cherry, not ahead
   counts). Dry run by default; "--apply" deletes. Use for "prune merged branches", "clean
   up stale worktrees".
-allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh repo view*), Bash(goal merged *), Bash(xargs *)
+allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh repo view*), Bash(next-item merged *), Bash(xargs *)
 ---
 
 # Prune merged branches and worktrees
@@ -65,7 +65,7 @@ For each `origin/<branch>` that is not protected, run the shared merged-branch t
 uses too):
 
 ```bash
-goal merged --no-fetch <branch>   # step 1 already fetched
+next-item merged --no-fetch <branch>   # step 1 already fetched
 ```
 
 - Exit `0` → **fully merged**, safe to delete. Either every commit is on `$base` as the same patch
@@ -148,7 +148,7 @@ For every worktree except the primary checkout (never touch that one):
    the worktree is **KEEP: dirty**, whatever its merge status. Never discard uncommitted
    work.
 2. **Open-PR check.** If its branch is an open PR head from step 1: **KEEP: open PR #N**.
-3. **Patch-equivalence.** On a named branch: `goal merged <branch>`. In **detached HEAD** (common once the
+3. **Patch-equivalence.** On a named branch: `next-item merged <branch>`. In **detached HEAD** (common once the
    PR branch was deleted upstream): `git merge-base --is-ancestor <sha> origin/$base`, then fall back to
    `git cherry origin/$base <sha>`. Merged → **MERGED**, safe to remove. Not merged →
    **KEEP: N outstanding commits**.

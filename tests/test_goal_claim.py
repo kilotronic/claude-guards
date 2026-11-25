@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""`goal claim` and `goal release`: a commit on the work's own branch that marks or unmarks one todo line. The
+"""`next-item claim` and `next-item release`: a commit on the work's own branch that marks or unmarks one todo line. The
 work's pull request, once open, carries the mark, and that is the claim."""
 
 from __future__ import annotations
@@ -327,7 +327,7 @@ def test_a_claim_can_be_released_while_the_milestone_is_overdue(tmp_path: Path) 
 def test_goal_on_another_work_branch_is_not_told_to_finish_a_same_named_claim(
     tmp_path: Path,
 ) -> None:
-    """Plain `goal` decides "yours" by branch on a work branch, as `goal claim` does."""
+    """Plain `next-item` decides "yours" by branch on a work branch, as `next-item claim` does."""
     p = make_project(tmp_path)
     pr = p.open_claim("Add a snooze button", "agent-a", 7)
     _, out = p.json(cwd=work_tree(p, tmp_path))
