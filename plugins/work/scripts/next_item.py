@@ -225,16 +225,15 @@ def _has_scheme(target: str) -> bool:
     return re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", target) is not None
 
 
-# A **Current milestone:** that points to its goals file: the link comes first, or after "see" or "in".
-_POINTER = re.compile(
-    r"(?:|.*\bin\s+|see:?\s+)\[[^\]]*\]\(([^)\s#]+)[^)]*\)", re.IGNORECASE
-)
+# A **Current milestone:** that points to its goals file: the value starts with the link, bare or after "see".
+_POINTER = re.compile(r"(?:see:?\s+)?\[[^\]]*\]\(([^)\s#]+)[^)]*\)", re.IGNORECASE)
 
 
 def goals_path(facts: dict[str, str]) -> str | None:
-    """The goals file: a **Current milestone:** whose value is a link to a file, bare or after "see" or "in"
+    """The goals file: a **Current milestone:** whose value starts with a link to a file, bare or after "see"
     (`see [the goals](docs/goals.md)`), points there for the milestone, so the link is the goals file and not
-    the milestone's name. A file the milestone only mentions (`port [the CLI](docs/cli.md)`), a backticked
+    the milestone's name; words after the link, and its #anchor, are not kept. A file the milestone only
+    mentions (`port [the CLI](docs/cli.md)`, `write the docs in [the wiki](docs/wiki.md)`), a backticked
     name and an address with a scheme are plain text."""
     m = _POINTER.match(facts.get("current milestone") or "")
     return m.group(1) if m and not _has_scheme(m.group(1)) else None

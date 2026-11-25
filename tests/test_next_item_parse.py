@@ -37,7 +37,7 @@ def test_the_section_ends_at_the_next_heading() -> None:
     [
         "see [the goals](docs/goals.md) § _Priority_",
         "[docs/goals.md](docs/goals.md)",
-        "the first one not done in [the goals](docs/goals.md)",
+        "[the goals](docs/goals.md#m2), the phone app",
         "See: [the goals](docs/goals.md), top first",
     ],
 )
@@ -61,6 +61,8 @@ def test_a_todo_file_is_never_an_address_with_a_scheme() -> None:
         "ship the [docs site](https://example.com/docs)",  # a web address is not a goals file
         "write [the FAQ](mailto:help@example.com)",  # nor is any other address with a scheme
         "M3, port [the CLI](docs/cli.md) to Windows",  # a file the milestone mentions is not where it is stated
+        "M4, write the docs in [the wiki](docs/wiki.md)",
+        "M2, the phone app (in [goals](docs/goals.md))",
     ],
 )
 def test_a_plain_text_milestone_has_no_goals_file(milestone: str) -> None:

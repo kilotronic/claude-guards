@@ -149,9 +149,10 @@ issues, nothing on it is taken for a todo file, and a link to a web address neve
 neither is unclear, and `next-item` says so.
 
 For a todo file, `next-item` needs the file, the limit, and the milestone. A `**Current milestone:**` whose value
-is a link to a file, bare or after "see" or "in" (for example `- **Current milestone:** see [the goals](docs/goals.md)`),
+starts with a link to a file, bare or after "see" (for example `- **Current milestone:** see [the goals](docs/goals.md)`),
 points to the goals file that states it, and `next-item` answers `milestone: see docs/goals.md`, with the line's
-**Done when:** and **By:** if it has them. A file the milestone only mentions (`M3, port [the CLI](docs/cli.md)`),
+**Done when:** and **By:** if it has them; words after the link, and its `#` anchor, are not kept. A file the
+milestone only mentions (`M3, port [the CLI](docs/cli.md)`),
 a backticked name and an address such as `https://` or `mailto:` are read as part of the milestone's name. (The separate `**Goals:**` line was removed in work 2.0.0; move its link into
 `**Current milestone:**`.) For GitHub issues it needs neither the limit nor a milestone, and reads no
 `.claude/work.toml`; a milestone it does state is checked as below. A milestone whose By date has passed is unclear. A frozen repo has one line instead:
