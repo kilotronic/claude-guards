@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""The record of work: the README's **Work is recorded in:** line names a todo file or GitHub issues, and `goal`
+"""The record of work: the README's **Work is recorded in:** line names a todo file or GitHub issues, and `next-item`
 says which (`record`), so every skill follows the same rule."""
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ def test_the_text_answer_says_issues(tmp_path: Path) -> None:
     p = make_project(tmp_path, readme=issues_readme("GitHub issues"), todo=None)
     rc, text, _ = p.run()
     assert rc == 0
-    assert "goal: M2, the phone app" in text
+    assert "milestone: M2, the phone app" in text
     assert "record: GitHub issues" in text
     assert "next: this repo records its work in GitHub issues" in text
 
@@ -92,7 +92,7 @@ def test_an_issues_repo_needs_no_milestone_or_limit(tmp_path: Path) -> None:
     assert rc == 0, out
     assert out["record"] == "issues"
     rc, text, _ = p.run()
-    assert "goal: see None" not in text
+    assert "milestone: see None" not in text
 
 
 def test_a_todo_file_beside_a_link_to_issues_stays_the_record(tmp_path: Path) -> None:

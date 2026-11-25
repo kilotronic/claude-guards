@@ -2,7 +2,7 @@
 name: start-work
 description:
   Start one todo item properly. Proves it is still open, makes the worktree and branch off origin/main, commits
-  the claim mark with goal claim and opens the work's pull request at once, as a draft (the open pull request is
+  the claim mark with next-item claim and opens the work's pull request at once, as a draft (the open pull request is
   the claim), checks again that no lower-numbered pull request marks the same item, and restates what done
   means. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the
   next skill.
@@ -10,8 +10,8 @@ description:
 
 # Start an item
 
-Takes the item the user named, or `goal`'s next item (`goal --json`: `.next.item.title`). Do the steps in
-order; none is optional. When `goal` answers `record: issues`, the repo keeps its work in GitHub issues instead:
+Takes the item the user named, or `next-item`'s next item (`next-item --json`: `.next.item.title`). Do the steps in
+order; none is optional. When `next-item` answers `record: issues`, the repo keeps its work in GitHub issues instead:
 follow [Work kept in GitHub issues](#work-kept-in-github-issues) below.
 
 ## 1. Prove it is still open
@@ -22,23 +22,23 @@ The todo list lags reality; redoing shipped work is the costly mistake. Before c
 git fetch -q origin
 git log --oneline -S'<a symbol or phrase from the entry>' origin/main -- <path>   # did a fix land?
 git branch -r --list '*<a word from the title>*'                                  # related branches
-goal merged <a related branch>                                                    # exit 0: on main already
+next-item merged <a related branch>                                               # exit 0: on main already
 ```
 
 If the fix already landed, don't claim: delete the entry (a plan row: its file) in a small docs pull request,
 citing the fix, and go
-back to `goal`. That is a complete, reportable outcome.
+back to `next-item`. That is a complete, reportable outcome.
 
 ## 2. Worktree and branch
 
-`goal --json` gives the branch name (`.next.item.branch`, `work/<slug>` by default). Always a worktree, never
+`next-item --json` gives the branch name (`.next.item.branch`, `work/<slug>` by default). Always a worktree, never
 the main checkout, branched from the up-to-date `origin/main`:
 
 ```bash
 git worktree add ../<repo>-<slug> -b <branch> origin/main
 ```
 
-Then the repo's own set-up (its README or CLAUDE.md), in that worktree, before claiming: `goal claim` commits
+Then the repo's own set-up (its README or CLAUDE.md), in that worktree, before claiming: `next-item claim` commits
 there, so the repo's commit hooks need what the set-up installs.
 
 ## 3. Claim it: the work's pull request is the claim
@@ -46,28 +46,28 @@ there, so the repo's commit hooks need what the set-up installs.
 In the worktree, in this order:
 
 ```bash
-goal claim '<the entry's title>'        # checks the open pull requests, then commits the mark as the first commit
+next-item claim '<the entry's title>'   # checks the open pull requests, then commits the mark as the first commit
 git push -u origin <branch>
 gh pr create --draft --title '<type>: <the work, in the imperative>' --body '<what and why; the item it claims>'
-goal claim '<the entry's title>'        # again, now that the pull request is open: settles a tie
+next-item claim '<the entry's title>'   # again, now that the pull request is open: settles a tie
 ```
 
-- **The first `goal claim` says `already yours`** for a mark already on the default branch: there is no mark
+- **The first `next-item claim` says `already yours`** for a mark already on the default branch: there is no mark
   commit to push, so make the work's first commit before opening the pull request.
-- **The first `goal claim` exits 3**: an open pull request already marks the item (it names it), or the item
-  needs the owner. Remove the worktree and branch, and go back to `goal`.
+- **The first `next-item claim` exits 3**: an open pull request already marks the item (it names it), or the item
+  needs the owner. Remove the worktree and branch, and go back to `next-item`.
 - **Open the pull request now, as a draft** (`--draft`), and **don't arm auto-merge**: the draft says the work
   isn't ready yet. finish-work marks it ready (`gh pr ready`) and arms auto-merge once the work is done. A draft
   holds the item like any open pull request. No CI or review has to pass before the work starts.
-- **The second `goal claim` settles a tie.** Two sessions can both pass the first check in the seconds before
+- **The second `next-item claim` settles a tie.** Two sessions can both pass the first check in the seconds before
   either pull request opens. The lower pull request number wins. Exit 0 (`already yours`) means yours holds
   the item. Exit 3 means another pull request marked it first: close yours with a comment naming the winner,
   as the message gives it (`gh pr close <n> --comment 'Closing: #<winner> marked this item first.'`), remove
-  the worktree and branch, and go back to `goal` for another item. If the message gives no command, your
-  pull request isn't listed on GitHub yet: close it all the same. Exit 1 means `goal` couldn't check (GitHub
+  the worktree and branch, and go back to `next-item` for another item. If the message gives no command, your
+  pull request isn't listed on GitHub yet: close it all the same. Exit 1 means `next-item` couldn't check (GitHub
   didn't answer, or another pull request's branch isn't fetched yet): run it again; don't start until it
   exits 0.
-- `goal` now answers **finish** with this item and names your pull request.
+- `next-item` now answers **finish** with this item and names your pull request.
 
 ## 4. Say what done means
 
@@ -83,15 +83,15 @@ the work's own pull request, so the next reader has it.
 ## Work kept in GitHub issues
 
 This is the one rule the work skills share for a repo whose README names GitHub issues as its record of work.
-`goal` reads the README's `**Work is recorded in:**` line and says which record the repo keeps (`goal --json`:
+`next-item` reads the README's `**Work is recorded in:**` line and says which record the repo keeps (`next-item --json`:
 `.record`):
 
 - **`todo`**: the line names a todo file. Every step in these skills applies as written.
 - **`issues`**: the line names GitHub issues. There is no todo file to read, mark or delete from, so the
-  todo-file steps (`goal claim`, `goal release`, removing the entry, follow-ups as entries) give way to the
+  todo-file steps (`next-item claim`, `next-item release`, removing the entry, follow-ups as entries) give way to the
   issue steps here. Everything else stays: the worktree and branch, tests first, the repo's gates, the `pr`
   skill's review, auto-merge and the clean-up.
-- **Neither:** `goal` exits 2 and says the line names neither a todo file nor GitHub issues. Say so to the
+- **Neither:** `next-item` exits 2 and says the line names neither a todo file nor GitHub issues. Say so to the
   person and treat it as today's unclear answer: ask the owner, and pick nothing yourself.
 
 For `issues`, **use the repo's own issue-tracking skill or rules first**: if the repo has a skill for its

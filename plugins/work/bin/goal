@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""The `goal` command. Claude Code puts this plugin's bin/ on PATH; the code is in ../scripts/goal.py."""
+"""`goal`, the old name of `next-item`: it says so on stderr, then runs exactly as `next-item` does. It goes
+away in a later release, once every repo calls `next-item`."""
 
 import os
 import sys
@@ -11,4 +12,5 @@ sys.path.insert(
 
 from goal import main
 
+print("`goal` is now `next-item`; `goal` goes away in a later release", file=sys.stderr)
 sys.exit(main())

@@ -158,7 +158,7 @@ def resume(number: str, cwd: str, session: str, host: str, run) -> tuple[int, st
 
 
 def machine() -> str:
-    """This machine's name for comments: $GOAL_MACHINE (as `goal` uses it; set it to a name you are happy to
+    """This machine's name for comments: $GOAL_MACHINE (as `next-item` uses it; set it to a name you are happy to
     publish in a public repo), else the host name."""
     return os.environ.get("GOAL_MACHINE") or socket.gethostname().split(".")[0]
 

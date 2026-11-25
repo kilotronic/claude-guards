@@ -9,7 +9,7 @@ description:
 
 # Finish an item
 
-When `goal` answers `record: issues`, the repo keeps its work in GitHub issues: skip the todo-file steps here
+When `next-item` answers `record: issues`, the repo keeps its work in GitHub issues: skip the todo-file steps here
 and follow [start-work's "Work kept in GitHub issues"](../start-work/SKILL.md#work-kept-in-github-issues) for
 the issue; the gates, the merge and the clean-up below are the same.
 
@@ -17,7 +17,7 @@ the issue; the gates, the merge and the clean-up below are the same.
 
 - **Remove the entry from the todo file** in the last commit, citing the work by its commit subject (a squash
   or rebase merge rewrites SHAs). Delete it; never tick it. The pull request still holds the claim while it
-  is open (`goal` reads the mark from the branch's earlier commit), and the item is gone once it merges. A
+  is open (`next-item` reads the mark from the branch's earlier commit), and the item is gone once it merges. A
   plan row (`rows` in `.claude/work.toml`) is removed by deleting its file. Keep any durable lesson in the repo's
   decisions doc first.
 - **Follow-ups found on the way become new todo entries** in the same pull request, in the right section,
@@ -35,10 +35,10 @@ Wait with one `gh pr checks <n> --watch --interval 60`, then confirm:
 
 ```bash
 gh pr view <n> --json state -q .state    # must print MERGED
-goal merged <branch>                     # exit 0: the branch's work is on main
+next-item merged <branch>                # exit 0: the branch's work is on main
 ```
 
-`goal merged` is the same test branch-prune uses: every commit on main as the same patch (`git cherry`), or a
+`next-item merged` is the same test branch-prune uses: every commit on main as the same patch (`git cherry`), or a
 merged pull request whose head is the branch's tip, which is how a squash merge shows. Exit 3 means
 something on the branch is not on main: stop and look; don't delete.
 
@@ -61,12 +61,12 @@ gh pr close <n>
 If the work goes on under another item instead, move the claim on the branch, and push:
 
 ```bash
-goal release '<the old title>'    # commits the mark away
-goal claim '<the new title>'      # commits the new mark
+next-item release '<the old title>'    # commits the mark away
+next-item claim '<the new title>'      # commits the new mark
 ```
 
 An item held by a mark on the default branch, made before claims moved to pull requests, is freed only by a
-pull request that removes the mark: `goal release '<title>'` on a branch, pushed and merged. Closing someone
+pull request that removes the mark: `next-item release '<title>'` on a branch, pushed and merged. Closing someone
 else's stale pull request, or removing their mark (`--holder <their label>`), is the owner's call.
 
 Keep the worktree until its commits are safe: pushed to a branch on origin, or saved as a patch

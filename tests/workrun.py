@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 
-"""Build a made-up project with an origin, and run `goal` in it the way an agent does.
+"""Build a made-up project with an origin, and run `next-item` in it the way an agent does.
 
-Each project is a bare `origin` plus a clone, so `goal` reads `origin/main` as it does in real use. A fake
+Each project is a bare `origin` plus a clone, so `next-item` reads `origin/main` as it does in real use. A fake
 `gh` on PATH answers from JSON files the test writes and logs every call, so no test reaches GitHub.
 """
 
@@ -18,7 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 WORK = Path(__file__).resolve().parents[1] / "plugins" / "work"
-GOAL = WORK / "bin" / "goal"
+NEXT_ITEM = WORK / "bin" / "next-item"
+GOAL = WORK / "bin" / "goal"  # the old name, kept as an alias for now
 sys.path.insert(0, str(WORK / "scripts"))
 
 README = """\
@@ -31,7 +32,7 @@ Kitchen timers for people who cook.
 - **Mission:** a kitchen timer anyone can start with one hand.
 - **Current milestone:** M2, the phone app. **Done when:** a timer rings on a locked phone. **By:** no date
 - **Work is recorded in:** `docs/todo.md`
-- **Claim before starting:** `goal claim '<the entry's title>'`
+- **Claim before starting:** `next-item claim '<the entry's title>'`
 - **Work in progress:** at most 2 at once; defect fixes one at a time
 - **Defects first:** the Defects section is fixed, top first, before anything new
 
@@ -211,6 +212,7 @@ class Project:
         who: str | None = "agent-a",
         today: str = "2026-11-22",
         cwd: Path | None = None,
+        command: Path = NEXT_ITEM,
     ) -> tuple[int, str, str]:
         env = {
             **os.environ,
@@ -228,7 +230,7 @@ class Project:
         if who:
             env["GOAL_AS"] = who
         done = subprocess.run(
-            [sys.executable, str(GOAL), *args, "--today", today],
+            [sys.executable, str(command), *args, "--today", today],
             cwd=cwd or self.clone,
             capture_output=True,
             text=True,

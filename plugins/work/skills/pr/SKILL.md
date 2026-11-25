@@ -1,6 +1,6 @@
 ---
 name: pr
-allowed-tools: Bash(git fetch *), Bash(git rebase origin/*), Bash(git status*), Bash(git log *), Bash(git rev-parse *), Bash(git push --force-with-lease origin HEAD), Bash(gh pr view *), Bash(gh pr create *), Bash(gh pr ready *), Bash(gh pr edit *), Bash(gh pr comment *), Bash(gh pr checks *), Bash(gh issue list *), Bash(gh run view *), Bash(gh run list *), Bash(gh run watch *), Bash(goal merged *), Agent, Skill(code-review)
+allowed-tools: Bash(git fetch *), Bash(git rebase origin/*), Bash(git status*), Bash(git log *), Bash(git rev-parse *), Bash(git push --force-with-lease origin HEAD), Bash(gh pr view *), Bash(gh pr create *), Bash(gh pr ready *), Bash(gh pr edit *), Bash(gh pr comment *), Bash(gh pr checks *), Bash(gh issue list *), Bash(gh run view *), Bash(gh run list *), Bash(gh run watch *), Bash(next-item merged *), Agent, Skill(code-review)
 description:
   Open a pull request for the current branch (rebase, docs, checks, a fresh reviewer agent), or with "merge"
   arm auto-merge and confirm it landed. Use for "open a PR", "ship this branch", "merge it".
@@ -216,7 +216,7 @@ Report the result; on failure, read the log (`gh run view <run-id> --log-failed`
 
 ### M4. Clean up
 
-First `goal merged <branch>`: exit 0 means every commit on the branch is on main. Any other answer: stop and
+First `next-item merged <branch>`: exit 0 means every commit on the branch is on main. Any other answer: stop and
 look before deleting anything (a local commit after the reviewed one is lost otherwise). Then, if the repo
 doesn't delete merged branches on GitHub, delete it (`git push origin --delete <branch>`). Remove the local
 worktree and branch from outside the worktree (`git worktree remove <path>`, `git branch -D <branch>`). If this session's working directory is that worktree, leave it and say it can be removed once the

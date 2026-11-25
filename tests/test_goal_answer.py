@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""goal's answer, run as a command in a made-up project: the order, the limit, unclear repos."""
+"""next-item's answer, run as a command in a made-up project: the order, the limit, unclear repos."""
 
 from __future__ import annotations
 
@@ -21,11 +21,14 @@ def test_the_top_free_defect_comes_first(tmp_path: Path) -> None:
     assert out["in_progress"] == {"count": 0, "limit": 2, "claims": []}
 
 
-def test_the_text_answer_says_goal_next_and_in_progress(tmp_path: Path) -> None:
+def test_the_text_answer_says_milestone_next_and_in_progress(tmp_path: Path) -> None:
     p = make_project(tmp_path)
     rc, out, _ = p.run()
     assert rc == 0
-    assert "goal: M2, the phone app (done when: a timer rings on a locked phone)" in out
+    assert (
+        "milestone: M2, the phone app (done when: a timer rings on a locked phone)"
+        in out
+    )
     assert 'next: fix "The timer skips a second"' in out
     assert "in progress: 0 of 2" in out
 
@@ -161,7 +164,7 @@ def test_a_goals_file_stands_in_for_the_milestone(tmp_path: Path) -> None:
     p = make_project(tmp_path, readme=readme, extra={"docs/goals.md": "# Goals\n"})
     rc, out, _ = p.run()
     assert rc == 0, out
-    assert "goal: see docs/goals.md" in out
+    assert "milestone: see docs/goals.md" in out
 
 
 def test_a_milestone_past_its_date_is_unclear(tmp_path: Path) -> None:
