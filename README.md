@@ -203,6 +203,9 @@ repo's own checks of its entries read it as before:
   `next-item claim` again once its pull request is open. The lower pull request number wins: the higher one gets
   exit 3 naming the winner, and closes itself with a comment pointing at it. `next-item` names both pull requests
   while both are open, and tells the later one to stop.
+- **A batch carries the claims it lands.** The `pr-batch` skill's combined pull request first commits the marks of
+  the pull requests it batches, then their work, and closes them once it is open: from then on it holds their
+  items. Until they close, `next-item` names both, the lower number (the original) as the holder.
 - **Releasing:** to drop the work, close its pull request (a mark on the default branch needs a merged
   `next-item release`, below). To go on under another item, run
   `next-item release '<title>'`, which commits the mark away on the branch, then `next-item claim` on the other one.
