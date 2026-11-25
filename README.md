@@ -6,8 +6,8 @@ Two [Claude Code](https://code.claude.com) plugins for agents working in a repos
   why and what to do instead, so the agent can fix its own command and carry on.
 - **work**: the `next-item` command, which answers "what should I work on next?" from what the repo states in
   writing; the skills that claim an item, build it and land it (`pr` opens the pull request and has a fresh
-  agent review it); `long-loops` and `add-knowledge`; hooks around merging; and a hook that offers to share what
-  Claude saves to memory. See [The work plugin](#the-work-plugin).
+  agent review it, and `pr-batch` lands several of your own as one); `long-loops` and `add-knowledge`; hooks
+  around merging; and a hook that offers to share what Claude saves to memory. See [The work plugin](#the-work-plugin).
 
 The guards were written for several agents working in one repository at once, each in its own git worktree.
 They suit a single agent too. Note that a plain clone is its own main checkout, so the main-checkout guards
@@ -240,6 +240,7 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 | `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `next-item merged`. Dry run by default                              |
 | `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                      |
 | `pr`            | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed                |
+| `pr-batch`      | Lands several of your own open pull requests as one, a commit each: closes the originals, reviews and arms the batch, says where each landed |
 | `add-knowledge` | Moves a memory Claude saved into the file every session reads (a repo's CLAUDE.md or the team's rules) by pull request, or marks it personal |
 
 The `pr` skill's checklist leaves out an item turned off for the repo in the guards' overrides file, by the item's
