@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""next-item: what to work on next in this repo, from what the repo states in writing. (This file keeps the
-command's old name, goal; `goal` still runs it, with a notice, until a later release.)
+"""next-item: what to work on next in this repo, from what the repo states in writing.
 
 It reads, from the working copy (so goals edited locally count right away):
 
-- the README's `## How work runs here` section: the milestone or goals file, the todo file and the limit on
+- the README's `## How work runs here` section: the milestone (or the goals file its line links), the todo file and the limit on
   work in progress. When its **Work is recorded in:** line names GitHub issues rather than a todo file, next-item
   answers `record: issues` with no item, and the skills work through the issues;
 - the todo file: its Defects and Next sections, top first, and the claim marks on their entries;
@@ -202,11 +201,6 @@ def parse_readme(text: str) -> dict[str, str] | None:
     return facts
 
 
-def _path_in(value: str) -> str | None:
-    m = re.search(r"\]\(([^)\s#]+)", value) or re.search(r"`([^`\s]+)`", value)
-    return m.group(1) if m else None
-
-
 # The line names GitHub issues when it starts with those words, bare or as a link's text.
 ISSUES_LINE = re.compile(r"\[?github issues?\b", re.IGNORECASE)
 
@@ -221,14 +215,28 @@ def todo_path(facts: dict[str, str]) -> str | None:
     value = facts.get("work is recorded in")
     if not value or in_issues(facts):
         return None
-    links = [x for x in re.findall(r"\]\(([^)\s#]+)", value) if "://" not in x]
+    links = [x for x in re.findall(r"\]\(([^)\s#]+)", value) if not _has_scheme(x)]
     m = re.search(r"`([^`\s]+)`", value)
     return links[0] if links else (m.group(1) if m else None)
 
 
+def _has_scheme(target: str) -> bool:
+    """A link to an address (`https://…`, `mailto:…`), not to a file in the repo."""
+    return re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", target) is not None
+
+
+# A **Current milestone:** that points to its goals file: the value starts with the link, bare or after "see".
+_POINTER = re.compile(r"(?:see:?\s+)?\[[^\]]*\]\(([^)\s#]+)[^)]*\)", re.IGNORECASE)
+
+
 def goals_path(facts: dict[str, str]) -> str | None:
-    value = facts.get("goals")
-    return _path_in(value) if value else None
+    """The goals file: a **Current milestone:** whose value starts with a link to a file, bare or after "see"
+    (`see [the goals](docs/goals.md)`), points there for the milestone, so the link is the goals file and not
+    the milestone's name; words after the link, and its #anchor, are not kept. A file the milestone only
+    mentions (`port [the CLI](docs/cli.md)`, `write the docs in [the wiki](docs/wiki.md)`), a backticked
+    name and an address with a scheme are plain text."""
+    m = _POINTER.match(facts.get("current milestone") or "")
+    return m.group(1) if m and not _has_scheme(m.group(1)) else None
 
 
 def wip_limit(facts: dict[str, str]) -> int | None:
@@ -1009,12 +1017,13 @@ def load(
         return None, goal_info, missing
     if "frozen" in facts:
         return None, {"frozen": facts["frozen"]}, []
+    goals_file = goals_path(facts)
     goal_info = {
         "mission": facts.get("mission"),
-        "milestone": facts.get("current milestone"),
+        "milestone": None if goals_file else facts.get("current milestone"),
         "done_when": facts.get("done when"),
         "by": facts.get("by"),
-        "goals_file": goals_path(facts),
+        "goals_file": goals_file,
     }
     # Claiming and releasing need only the todo file and the settings, so an overdue milestone never stops an
     # agent from dropping its claim.
@@ -1026,8 +1035,13 @@ def load(
         and not goal_info["goals_file"]
     ):
         missing.append(
-            "no milestone stated: add **Current milestone:** with **Done when:**, or **Goals:** linking the file"
-            " that states it"
+            "no milestone stated: add **Current milestone:** with **Done when:**, or a **Current milestone:**"
+            " linking the file that states it"
+            + (
+                " (**Goals:** is no longer read: move its link there)"
+                if "goals" in facts
+                else ""
+            )
         )
     by = goal_info["by"] or ""
     due = _date(by) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", by) else None
@@ -1035,7 +1049,7 @@ def load(
         missing.append(f"the **By:** date {by} is not a real date")
     if need_goal and due is not None and due < today:
         missing.append(
-            f"{goal_info['milestone'] or 'the milestone'} was due {by}: is it still the milestone, with a new date?"
+            f"{goal_info['milestone'] or (f'the milestone in {goals_file}' if goals_file else 'the milestone')} was due {by}: is it still the milestone, with a new date?"
         )
     if issues:
         # The repo keeps its work in GitHub issues: next-item has no list or limit to read, and says so. A milestone it
@@ -1248,15 +1262,14 @@ def render(out: dict) -> str:
         return "\n".join(f"unclear: {m}" for m in out["missing"])
     if g.get("frozen"):
         return f"frozen: {g['frozen']}"
-    if g.get("milestone"):
+    name = g.get("milestone") or (
+        f"see {g['goals_file']}" if g.get("goals_file") else None
+    )
+    if name:
         bits = [f"done when: {g['done_when']}"] if g.get("done_when") else []
         if g.get("by") and g["by"] != "no date":
             bits.append(f"by {g['by']}")
-        lines.append(
-            f"milestone: {g['milestone']}" + (f" ({'; '.join(bits)})" if bits else "")
-        )
-    elif g.get("goals_file"):
-        lines.append(f"milestone: see {g['goals_file']}")
+        lines.append(f"milestone: {name}" + (f" ({'; '.join(bits)})" if bits else ""))
     n = out["next"]
     if out.get("record") == "issues":
         lines += [f"record: {g['recorded_in']}", f"next: {n['reason']}"]

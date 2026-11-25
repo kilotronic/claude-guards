@@ -324,7 +324,7 @@ def test_a_claim_can_be_released_while_the_milestone_is_overdue(tmp_path: Path) 
     assert rc == 0, err
 
 
-def test_goal_on_another_work_branch_is_not_told_to_finish_a_same_named_claim(
+def test_next_item_on_another_work_branch_is_not_told_to_finish_a_same_named_claim(
     tmp_path: Path,
 ) -> None:
     """Plain `next-item` decides "yours" by branch on a work branch, as `next-item claim` does."""

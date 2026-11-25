@@ -62,7 +62,7 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
   quotes, so a subject like `--subject "feat: x (#17)"` gets no allow; and a short flag with its value
   attached that contains an F (`-RAcmeFoo/app`, `-tFix`) reads as `-F`. Both fail safe: auto mode blocks the
   merge as it would without the hook. Shape: read the words first, then check each unquoted part.
-- **next-item follows the README's link to the goals file.** `**Goals:**` is reported as a path only; the milestone
+- **next-item follows the README's link to the goals file.** A `**Current milestone:**` linking a file is reported as a path only; the milestone
   and its finish line the linked file states are not read, so `next-item` can't say when a milestone looks done.
 - **next-item reads a plan's ordered rows, not only todo entries.** Repos that keep their order in a plan's table
   still need a second lister and a second kind of claim. Shape: a `.claude/work.toml` setting naming the plan's
@@ -92,11 +92,3 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
   Python 3.9 and 3.10 a settings value with an apostrophe is refused; a heading inside a code block is read as
   a section, in the todo file and in the README (so this repo's own README example reads as its section); bytes that aren't UTF-8 elsewhere in the todo file are rewritten by a claim; a prose formatter or
   line-length rule can move or reject the mark at the end of a long line.
-- **Remove the `goal` alias once every repo calls `next-item`.** `goal` is the old name of `next-item`
-  (claude-guards' work plugin 1.8.0 added `next-item`); it prints a notice on stderr and answers the same. Some
-  repos that use the plugin still call `goal`. Once none does, delete `plugins/work/bin/goal` and its test, and
-  release a major version.
-- **Fold the README's `**Goals:**` line into `**Current milestone:**`.** `next-item` reads either: the milestone
-  line, or a `**Goals:**` line linking a goals file (answered as `milestone: see <file>`). Two keys for one fact.
-  Some repos still use `**Goals:**`, so it keeps working for now. Shape: let `**Current milestone:**` link a file,
-  switch the repos that use `**Goals:**`, then drop it.

@@ -12,10 +12,10 @@ import pytest
 from workrun import NEXT_ITEM, WORK, make_project
 
 
-def test_goal_defers_annotations_so_3_9_can_load_it() -> None:
+def test_next_item_defers_annotations_so_3_9_can_load_it() -> None:
     assert (
         "from __future__ import annotations"
-        in (WORK / "scripts" / "goal.py").read_text()
+        in (WORK / "scripts" / "next_item.py").read_text()
     )
 
 
@@ -34,7 +34,7 @@ def _python39() -> str | None:
     return None
 
 
-def test_goal_answers_under_3_9(tmp_path: Path) -> None:
+def test_next_item_answers_under_3_9(tmp_path: Path) -> None:
     python = _python39()
     if python is None:
         pytest.skip("no Python 3.9 on this machine; the annotations test covers it")

@@ -122,8 +122,7 @@ in progress: 0 of 2
 
 `next-item --list` adds every free item in order and every claim, and `--json` gives the same for scripts. Exit
 codes: 0 an answer, 1 an error, 2 unclear, 3 no (the item is someone else's, or a branch is not merged). The
-plugin puts `next-item` on the Bash tool's `PATH`; outside Claude Code, run `plugins/work/bin/next-item`. Its old name, `goal`, still runs it for now: it
-says on stderr that it is now `next-item`, then answers the same. It goes away in a later release.
+plugin puts `next-item` on the Bash tool's `PATH`; outside Claude Code, run `plugins/work/bin/next-item`. Its old name, `goal`, was removed in work 2.0.0: call `next-item`.
 
 ### What the repo states
 
@@ -149,8 +148,13 @@ has them, else by a few `gh` steps (start-work's "Work kept in GitHub issues"). 
 issues, nothing on it is taken for a todo file, and a link to a web address never is. A line that names
 neither is unclear, and `next-item` says so.
 
-For a todo file, `next-item` needs the file, the limit, and either the milestone or a `**Goals:**` line linking the
-file that states it. For GitHub issues it needs neither the limit nor a milestone, and reads no
+For a todo file, `next-item` needs the file, the limit, and the milestone. A `**Current milestone:**` whose value
+starts with a link to a file, bare or after "see" (for example `- **Current milestone:** see [the goals](docs/goals.md)`),
+points to the goals file that states it, and `next-item` answers `milestone: see docs/goals.md`, with the line's
+**Done when:** and **By:** if it has them; words after the link, and its `#` anchor, are not kept. A file the
+milestone only mentions (`M3, port [the CLI](docs/cli.md)`),
+a backticked name and an address such as `https://` or `mailto:` are read as part of the milestone's name. (The separate `**Goals:**` line was removed in work 2.0.0; move its link into
+`**Current milestone:**`.) For GitHub issues it needs neither the limit nor a milestone, and reads no
 `.claude/work.toml`; a milestone it does state is checked as below. A milestone whose By date has passed is unclear. A frozen repo has one line instead:
 `- **Frozen:** new work goes to <repo>.`
 
@@ -323,8 +327,8 @@ code 2 and writes its reason to stderr. Add a test that fails before you change 
 build a made-up project with a local `origin` and a stand-in `gh`, so none reaches GitHub.
 
 To release a plugin, raise `version` in its `plugin.json`. When that lands on main, the `tag-releases`
-workflow tags the commit as `<plugin>--v<version>` (for example `work--v1.4.0`). Claude Code checks a
-dependency's version constraint, such as `work ^1.4.0`, against these tags, so a version with no tag leaves
+workflow tags the commit as `<plugin>--v<version>` (for example `work--v2.0.0`). Claude Code checks a
+dependency's version constraint, such as `work ^2.0.0`, against these tags, so a version with no tag leaves
 every plugin that needs it turned off. The workflow tags only each plugin's current version, so if a run fails,
 fix it and run it again (or add the tag by hand) before the next version lands.
 
