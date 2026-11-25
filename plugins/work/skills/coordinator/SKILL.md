@@ -73,8 +73,8 @@ claim, and the coordinator claims nothing.
   done when the item and every follow-up have landed; report each by its pull request.";
 - "A question for the owner, or a design question, comes to me, the coordinator, in one message: the person's
   story, what the code does today and what you searched. Keep working on what it does not block.";
-- for a subagent or a cloud task: "Once each pull request is armed, tell me its number; I watch it to merged.
-  Give your final report and END, no monitors, no polls."
+- for a subagent or a cloud task: "Arm auto-merge and don't wait for it; I watch it to merged. Your final
+  report names each pull request and each follow-up not yet done. Then END, no monitors, no polls."
 
 A subagent has no Workflow tool, so a review level that fans out (high and above) can't start inside it. When
 its branch needs one, launch `/code-review <level> <pr>` yourself, with the instructions the repo's review rules
@@ -108,6 +108,8 @@ Notifications and `SendMessage` replies wake you; otherwise schedule one wake 20
   running on its machine: tell the person, and with their OK drop its claim by closing its pull request;
 - a lane stopped by a usage limit resumes on the same model, by `SendMessage` or `park resume <n>`, never sent
   to a new worker;
-- a worker whose pull request merged goes on to its own follow-ups; once it has none it is idle: back to step 3.
+- a worker whose pull request merged goes on to its own follow-ups. For one that has ended, resume it with its
+  follow-ups by `SendMessage`, or give each out as a new item (a cloud task can't be resumed). A worker with
+  none left is idle: back to step 3.
 
 Report to the person only what changed since the last report, in plain words.
