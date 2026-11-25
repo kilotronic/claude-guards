@@ -4,7 +4,7 @@ description:
   Start one todo item properly. Proves it is still open, makes the worktree and branch off origin/main, commits
   the claim mark with next-item claim and opens the work's pull request at once, as a draft (the open pull request is
   the claim), checks again that no lower-numbered pull request marks the same item, and restates what done
-  means. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the
+  means. Checks first that no open pull request changes the same files. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the
   next skill.
 ---
 
@@ -28,6 +28,17 @@ next-item merged <a related branch>                                             
 If the fix already landed, don't claim: delete the entry (a plan row: its file) in a small docs pull request,
 citing the fix, and go
 back to `next-item`. That is a complete, reportable outcome.
+
+**Then check it against the open pull requests**, so two branches don't change the same thing at once:
+
+```bash
+gh pr list --state open --json number,title,headRefName,mergeable
+gh pr diff <n> --name-only   # for each open pull request near the item
+```
+
+If the item would change the same files or the same mechanism as an open pull request, don't start it: one
+concern per pull request, and never build on a branch in review. Take the next item and come back once that one
+lands, or ask its author whether the item belongs in it.
 
 ## 2. Worktree and branch
 

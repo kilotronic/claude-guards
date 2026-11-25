@@ -234,17 +234,18 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 
 ### The skills
 
-| Skill           | Does                                                                                                                                         |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `orient`        | What changed on main, `next-item --list`, who else is working, open pull requests, one recommendation. Reads only                            |
-| `next`          | Takes `next-item`'s item and does it, start to merged, through `start-work` and `finish-work`                                                |
-| `start-work`    | Proves the item is still open, makes the branch, commits the claim mark and opens the work's draft pull request, says what done means        |
-| `finish-work`   | Removes the entry in the work's pull request, files follow-ups, runs the gates, marks it ready; after merge, cleans up                       |
-| `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `next-item merged`. Dry run by default                              |
-| `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                      |
-| `pr`            | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed                |
-| `pr-batch`      | Lands several of your own open pull requests as one, a commit each: closes the originals, reviews and arms the batch, says where each landed |
-| `add-knowledge` | Moves a memory Claude saved into the file every session reads (a repo's CLAUDE.md or the team's rules) by pull request, or marks it personal |
+| Skill           | Does                                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `orient`        | What changed on main, `next-item --list`, who else is working, open pull requests, one recommendation. Reads only                                |
+| `next`          | Takes `next-item`'s item and does it, start to merged, through `start-work` and `finish-work`                                                    |
+| `start-work`    | Proves the item is still open and clear of open pull requests, makes the branch, commits the claim mark, opens the draft pull request            |
+| `finish-work`   | Removes the entry in the work's pull request, files follow-ups and does them next, runs the gates, marks it ready; after merge, cleans up        |
+| `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `next-item merged`. Dry run by default                                  |
+| `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                          |
+| `pr`            | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed                    |
+| `pr-batch`      | Lands several of your own open pull requests as one, a commit each: closes the originals, reviews and arms the batch, says where each landed     |
+| `coordinator`   | Makes one session the dispatcher: assigns items in order to sessions, subagents and cloud tasks, paces by the PR and CI queues, relays questions |
+| `add-knowledge` | Moves a memory Claude saved into the file every session reads (a repo's CLAUDE.md or the team's rules) by pull request, or marks it personal     |
 
 The `pr` skill's checklist leaves out an item turned off for the repo in the guards' overrides file, by the item's
 id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat-model`).

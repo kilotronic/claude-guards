@@ -2,7 +2,7 @@
 name: finish-work
 description:
   Finish one claimed todo item. In the work's own pull request, removes the entry (the claim ends when it
-  merges), files follow-ups as new entries, runs the repo's gates, marks the pull request ready and arms
+  merges), files follow-ups as new entries and does them next, runs the repo's gates, marks the pull request ready and arms
   auto-merge; after it shows MERGED, removes the worktree and branches. Also abandons an item cleanly by closing
   its pull request. Use for "finish this", "land it", "wrap up", "abandon this item".
 ---
@@ -20,8 +20,12 @@ the issue; the gates, the merge and the clean-up below are the same.
   is open (`next-item` reads the mark from the branch's earlier commit), and the item is gone once it merges. A
   plan row (`rows` in `.claude/work.toml`) is removed by deleting its file. Keep any durable lesson in the repo's
   decisions doc first.
-- **Follow-ups found on the way become new todo entries** in the same pull request, in the right section,
-  with no claim mark.
+- **Follow-ups found on the way are done, not left.** One the item isn't finished without goes in this pull
+  request. Each other one (a fix found on the way, a simplification the work opens) becomes a new todo entry
+  in the same pull request, in the right section, with no claim mark, and is your next work: once this pull
+  request merges, take each through start-work, one pull request at a time, before any other item. Only one
+  that needs a person's decision or access, or waits on something that hasn't happened yet, stays for later;
+  say which, and what it waits on.
 - **Run the repo's gates**: its formatters, linters and tests (its CLAUDE.md or Makefile), and the review its
   rules require. Fix the findings before merge.
 - The pull request has been open, as a draft, since start-work. Finish it with the `pr` skill, with its fresh
