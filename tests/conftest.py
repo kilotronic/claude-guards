@@ -5,9 +5,16 @@ plugin root of its own, and `$CLAUDE_GUARDS_OVERRIDES` names a missing file so t
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
+
+# The work plugin's scripts import by name (`import next_item`); conftest loads before any test module, so a
+# test file run alone finds them too.
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent / "plugins" / "work" / "scripts")
+)
 
 
 @pytest.fixture(autouse=True)
