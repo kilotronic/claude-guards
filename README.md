@@ -139,7 +139,7 @@ The facts live in the README, where people read them too, under one heading, as 
 instead (for example `- **Work is recorded in:** GitHub issues on the team board`) gets `record: issues` and no
 item: the
 skills then find, claim and finish work through issues, by the repo's own issue-tracking skill or rules when it
-has them, else by a few `gh` steps (work-start's "Work kept in GitHub issues"). On a line that starts with GitHub
+has them, else by a few `gh` steps (start-work's "Work kept in GitHub issues"). On a line that starts with GitHub
 issues, nothing on it is taken for a todo file, and a link to a web address never is. A line that names
 neither is unclear, and `goal` says so.
 
@@ -188,17 +188,17 @@ repo's own checks of its entries read it as before:
 - **Starting:** on the work's new branch, `goal claim '<title>'` commits the mark, touching only that line.
   Push the branch and open the work's pull request at once, as a draft (`gh pr create --draft`), with auto-merge
   not armed. No separate pull request has to merge first, and the work starts right away. A draft holds the item
-  like any open pull request; work-finish marks it ready (`gh pr ready`) when the work is done, then arms
+  like any open pull request; finish-work marks it ready (`gh pr ready`) when the work is done, then arms
   auto-merge.
 - **An item is in progress while an open pull request carries its mark.** `goal` asks GitHub for the open pull
   requests into the default branch, as GitHub names it (`gh repo view`), not the local `origin/HEAD`, which
   can be stale. It reads the todo file on each one's branch. The claim is that pull request's, named with
-  its number, its author and the mark's holder. work-finish deletes the entry in the same pull request, and the
+  its number, its author and the mark's holder. finish-work deletes the entry in the same pull request, and the
   claim holds until it merges.
 - **Merged:** the entry is gone from the default branch, so the item is too. **Closed without merging:** the
   item is free again.
 - **Ties are settled on GitHub.** `goal claim` refuses an item an open pull request already marks. Two
-  sessions can still both pass that check in the seconds before either pull request opens, so work-start runs
+  sessions can still both pass that check in the seconds before either pull request opens, so start-work runs
   `goal claim` again once its pull request is open. The lower pull request number wins: the higher one gets
   exit 3 naming the winner, and closes itself with a comment pointing at it. `goal` names both pull requests
   while both are open, and tells the later one to stop.
@@ -233,9 +233,9 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 | Skill           | Does                                                                                                                                         |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `orient`        | What changed on main, `goal --list`, who else is working, open pull requests, one recommendation. Reads only                                 |
-| `next`          | Takes `goal`'s item and does it, start to merged, through `work-start` and `work-finish`                                                     |
-| `work-start`    | Proves the item is still open, makes the branch, commits the claim mark and opens the work's draft pull request, says what done means        |
-| `work-finish`   | Removes the entry in the work's pull request, files follow-ups, runs the gates, marks it ready; after merge, cleans up                       |
+| `next`          | Takes `goal`'s item and does it, start to merged, through `start-work` and `finish-work`                                                     |
+| `start-work`    | Proves the item is still open, makes the branch, commits the claim mark and opens the work's draft pull request, says what done means        |
+| `finish-work`   | Removes the entry in the work's pull request, files follow-ups, runs the gates, marks it ready; after merge, cleans up                       |
 | `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `goal merged`. Dry run by default                                   |
 | `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                      |
 | `pr`            | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed                |

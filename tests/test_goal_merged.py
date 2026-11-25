@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""`goal merged <branch>`: the merged-branch test that work-finish and branch-prune share.
+"""`goal merged <branch>`: the merged-branch test that finish-work and branch-prune share.
 
 Merged means every commit is on main as the same patch (`git cherry`), or a merged pull request's head is the
 branch's tip, which is how a squash merge shows. Anything else is not proven merged.

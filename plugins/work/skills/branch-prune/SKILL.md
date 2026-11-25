@@ -61,7 +61,7 @@ Always protect:
 
 ### 2. Classify every remote branch by patch-equivalence
 
-For each `origin/<branch>` that is not protected, run the shared merged-branch test (the one work-finish
+For each `origin/<branch>` that is not protected, run the shared merged-branch test (the one finish-work
 uses too):
 
 ```bash

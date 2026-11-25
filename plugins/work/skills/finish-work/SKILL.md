@@ -1,5 +1,5 @@
 ---
-name: work-finish
+name: finish-work
 description:
   Finish one claimed todo item. In the work's own pull request, removes the entry (the claim ends when it
   merges), files follow-ups as new entries, runs the repo's gates, marks the pull request ready and arms
@@ -10,7 +10,7 @@ description:
 # Finish an item
 
 When `goal` answers `record: issues`, the repo keeps its work in GitHub issues: skip the todo-file steps here
-and follow [work-start's "Work kept in GitHub issues"](../work-start/SKILL.md#work-kept-in-github-issues) for
+and follow [start-work's "Work kept in GitHub issues"](../start-work/SKILL.md#work-kept-in-github-issues) for
 the issue; the gates, the merge and the clean-up below are the same.
 
 ## 1. Before merge, in the work's own pull request
@@ -24,7 +24,7 @@ the issue; the gates, the merge and the clean-up below are the same.
   with no claim mark.
 - **Run the repo's gates**: its formatters, linters and tests (its CLAUDE.md or Makefile), and the review its
   rules require. Fix the findings before merge.
-- The pull request has been open, as a draft, since work-start. Finish it with the `pr` skill, with its fresh
+- The pull request has been open, as a draft, since start-work. Finish it with the `pr` skill, with its fresh
   review: once the work is done and pushed, mark it ready (`gh pr ready <n>`), since GitHub merges no draft.
   Arm auto-merge only after that, once its head is your pushed commit
   (`gh pr view --json headRefOid -q .headRefOid` equals `git rev-parse HEAD`).

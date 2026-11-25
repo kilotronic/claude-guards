@@ -1,5 +1,5 @@
 ---
-name: work-start
+name: start-work
 description:
   Start one todo item properly. Proves it is still open, makes the worktree and branch off origin/main, commits
   the claim mark with goal claim and opens the work's pull request at once, as a draft (the open pull request is
@@ -57,7 +57,7 @@ goal claim '<the entry's title>'        # again, now that the pull request is op
 - **The first `goal claim` exits 3**: an open pull request already marks the item (it names it), or the item
   needs the owner. Remove the worktree and branch, and go back to `goal`.
 - **Open the pull request now, as a draft** (`--draft`), and **don't arm auto-merge**: the draft says the work
-  isn't ready yet. work-finish marks it ready (`gh pr ready`) and arms auto-merge once the work is done. A draft
+  isn't ready yet. finish-work marks it ready (`gh pr ready`) and arms auto-merge once the work is done. A draft
   holds the item like any open pull request. No CI or review has to pass before the work starts.
 - **The second `goal claim` settles a tie.** Two sessions can both pass the first check in the seconds before
   either pull request opens. The lower pull request number wins. Exit 0 (`already yours`) means yours holds
@@ -111,7 +111,7 @@ and use the steps below only where they say nothing. With none, the minimal step
 - **Settle a tie:** two sessions can both pass that check in the same minute, so once yours is open, look
   again: `gh issue view <n> --json closedByPullRequestsReferences` lists the pull requests that close it. An
   open one with a lower number than yours holds it: close yours with a comment naming it, and go back to Find.
-- **Finish:** work-finish as written, minus the todo entry. The pull request's `Closes #<n>` closes the issue
+- **Finish:** finish-work as written, minus the todo entry. The pull request's `Closes #<n>` closes the issue
   when it merges. Follow-ups found on the way become new issues (`gh issue create`), named in the pull
   request.
 - **Abandon:** close the pull request and `gh issue edit <n> --remove-assignee @me`.

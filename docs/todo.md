@@ -79,7 +79,7 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
   upstream, not origin; a claimed entry whose title is edited locally reads as a mark no pull request carries;
   claims are read from the first 200 open pull requests only; a branch that deleted a claimed entry is read back
   only 20 commits; a pull request stacked on another work branch counts as a second claim on its item; on the
-  work branch after work-finish deletes the entry, `goal` no longer answers "finish" for it; a claim is matched to
+  work branch after finish-work deletes the entry, `goal` no longer answers "finish" for it; a claim is matched to
   the local branch's name, so a local branch pushed under another name doesn't see its own pull request; `goal release` compares the holder's name, not the machine; on
   Python 3.9 and 3.10 a settings value with an apostrophe is refused; a heading inside a code block is read as
   a section, in the todo file and in the README (so this repo's own README example reads as its section); bytes that aren't UTF-8 elsewhere in the todo file are rewritten by a claim; a prose formatter or
