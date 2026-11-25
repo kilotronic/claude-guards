@@ -4,14 +4,14 @@ description:
   Make this session the coordinator of a repo's agents. It assigns next-item's items, in order, to other Claude
   Code sessions, subagents and cloud tasks, checks each against the open pull requests first, slows down when
   pull requests or CI runs pile up, carries workers' questions to the person, and watches finished workers' pull
-  requests to merged. It never writes, judges or reviews the work. Use for "/coordinator", "be the project
+  requests to merged. It never writes, judges or reviews the work itself. Use for "/coordinator", "be the project
   manager", "keep the agents busy".
 ---
 
 # Coordinate: assign, unblock, pace
 
 One session holds this role per repo. It is a dispatcher. It never writes the work, judges a diff, decides a
-design question or reviews a change: each worker claims, builds, reviews and lands its own item through the
+design question or reviews a change itself: each worker claims, builds, reviews and lands its own item through the
 `next` skill. The coordinator keeps no state of its own: open pull requests are the claims and `next-item --list`
 is the queue, so a coordinator that stops loses nothing, and its successor starts at step 1.
 
@@ -101,7 +101,7 @@ Notifications and `SendMessage` replies wake you; otherwise schedule one wake 20
 (`ScheduleWakeup`). Never poll `gh` in a loop. At each wake:
 
 - an armed pull request whose worker has ended (a subagent or cloud task): drive it to `MERGED` with the `pr`
-  skill's merge step. A red check or a conflict goes back to a worker as a new brief; never fix it here;
+  skill's M2 and M4 steps (confirm it landed, clean up). A red check or a conflict goes back to a worker as a new brief; never fix it here;
 - a pull request the census shows `CONFLICTING` goes back to its worker to rebase, or, if its worker has
   ended, to a new worker as its item;
 - a worker silent, with no worktree activity for an hour, gets one `SendMessage`. Still silent and nothing

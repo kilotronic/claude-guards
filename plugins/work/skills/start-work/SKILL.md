@@ -4,7 +4,7 @@ description:
   Start one todo item properly. Proves it is still open, makes the worktree and branch off origin/main, commits
   the claim mark with next-item claim and opens the work's pull request at once, as a draft (the open pull request is
   the claim), checks again that no lower-numbered pull request marks the same item, and restates what done
-  means. Checks first that no open pull request changes the same files. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the
+  means. Before claiming, checks that no open pull request changes the same files. Use for "start <item>", "claim <item>", "pick up <item>", and at the end of the
   next skill.
 ---
 

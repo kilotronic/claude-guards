@@ -56,8 +56,13 @@ the last one, the limit, a rollover. The comfortable middle is where these bugs 
 ## 5. Land it
 
 Run `/work:finish-work`. It removes the entry in this work's own pull request (the claim ends when it merges), adds
-follow-ups as new entries, runs the repo's gates and review, and cleans up once the pull request shows MERGED.
+follow-ups as new entries (your next work), runs the repo's gates and review, and cleans up once the pull request
+shows MERGED.
 
 ## 6. Close out
 
-Report what landed and what follow-ups you filed. Then go back to step 1, unless the user named one item.
+Then do the follow-ups you filed, before anything `next-item` names: each one through `/work:start-work` by its
+title, one pull request at a time, steps 3 to 5, until none is left. They are part of this item, also when the
+user named it. Only one that waits on a person's decision or access, or on something that hasn't happened yet,
+stays. Report what landed, each follow-up's pull request, and what still waits and on what. Then go back to
+step 1, unless the user named one item.

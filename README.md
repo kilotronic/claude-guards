@@ -6,7 +6,8 @@ Two [Claude Code](https://code.claude.com) plugins for agents working in a repos
   why and what to do instead, so the agent can fix its own command and carry on.
 - **work**: the `next-item` command, which answers "what should I work on next?" from what the repo states in
   writing; the skills that claim an item, build it and land it (`pr` opens the pull request and has a fresh
-  agent review it, and `pr-batch` lands several of your own as one); `long-loops` and `add-knowledge`; hooks
+  agent review it, and `pr-batch` lands several of your own as one); `coordinator`, which makes one session assign the work to
+  other agents; `long-loops` and `add-knowledge`; hooks
   around merging; and a hook that offers to share what Claude saves to memory. See [The work plugin](#the-work-plugin).
 
 The guards were written for several agents working in one repository at once, each in its own git worktree.
