@@ -69,7 +69,7 @@ before step 5 reviews them.
 
 ### 4. Open or update the pull request
 
-Open it ready for review: by now the work is done. An existing draft (work-start opens the work's pull request
+Open it ready for review: by now the work is done. An existing draft (start-work opens the work's pull request
 as a draft) is marked ready now, with `gh pr ready <n>`, once its work is done and pushed. A repo whose CLAUDE.md
 says otherwise about drafts wins.
 

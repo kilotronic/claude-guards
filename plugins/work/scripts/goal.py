@@ -577,7 +577,7 @@ def _free(e: Entry, settings: Settings) -> bool:
 
 
 def _item(e: Entry, settings: Settings | None = None) -> dict:
-    """The entry as the answer names it; `branch` is the work branch the next and work-start skills create."""
+    """The entry as the answer names it; `branch` is the work branch the next and start-work skills create."""
     prefix = (settings or Settings()).branch_prefix
     return {
         "title": e.title,
@@ -868,7 +868,7 @@ def _branch_marks(
     repo: Repo, head: str, path: str, settings: Settings, keys: set[str]
 ) -> dict[str, Claim]:
     """The marks a branch carries, by title key. An entry its tip no longer has is judged by the latest commit on
-    the branch that still had it: work-finish deletes the claimed entry in the work's last commit, and the claim
+    the branch that still had it: finish-work deletes the claimed entry in the work's last commit, and the claim
     holds until the pull request merges."""
     entries = {key(e.title): e for e in repo.todo_at(path, settings, ref=head).entries}
     out = {k: e.claim for k, e in entries.items() if e.claim}
@@ -1120,7 +1120,7 @@ def me_from_env(label: str | None) -> Me:
 
 ISSUES = (
     "this repo records its work in GitHub issues: find, claim and finish work there, by the repo's own"
-    " issue-tracking skill or rules when it has them, else by the steps in the work-start skill"
+    " issue-tracking skill or rules when it has them, else by the steps in the start-work skill"
 )
 
 

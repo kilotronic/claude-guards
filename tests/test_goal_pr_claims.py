@@ -34,7 +34,7 @@ def test_an_open_pull_request_carrying_the_mark_claims_the_item(
 def test_a_draft_pull_request_carrying_the_mark_claims_the_item(
     tmp_path: Path,
 ) -> None:
-    """work-start opens the work's pull request as a draft, so a draft holds the item like any open one."""
+    """start-work opens the work's pull request as a draft, so a draft holds the item like any open one."""
     p = make_project(tmp_path)
     p.open_claim("The timer skips a second", "agent-b", 7, draft=True)
     rc, out = p.json()
@@ -96,7 +96,7 @@ def test_a_merged_pull_request_removes_the_item(tmp_path: Path) -> None:
 def test_an_open_pull_request_that_already_deleted_the_entry_still_holds_it(
     tmp_path: Path,
 ) -> None:
-    """work-finish deletes the entry in the work's last commit; the claim holds until the pull request merges."""
+    """finish-work deletes the entry in the work's last commit; the claim holds until the pull request merges."""
     p = make_project(tmp_path)
     p.open_claim("The timer skips a second", "agent-b", 7, then_delete=True)
     _, out = p.json()

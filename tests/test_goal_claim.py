@@ -12,7 +12,7 @@ from workrun import README, TODO, Project, claimed, git, make_project
 
 
 def work_tree(p: Project, tmp: Path, branch: str = "work/snooze") -> Path:
-    """A worktree on a new work branch off origin/main, as work-start makes it."""
+    """A worktree on a new work branch off origin/main, as start-work makes it."""
     wt = tmp / "wt"
     git(p.clone, "worktree", "add", "-q", "-b", branch, str(wt), "origin/main")
     return wt
@@ -41,7 +41,7 @@ def test_a_claim_commits_the_mark_on_the_work_branch(tmp_path: Path) -> None:
         "docs/todo.md"
     ]
     assert "open" in out and "pull request" in out
-    assert "as a draft" in out  # work-start opens the claiming pull request as a draft
+    assert "as a draft" in out  # start-work opens the claiming pull request as a draft
 
 
 def test_a_claim_opens_no_pull_request_of_its_own_and_pushes_nothing(

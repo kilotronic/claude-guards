@@ -1,9 +1,9 @@
 ---
 name: orient
 description:
-  Orient at the start of a session with no task given, or when asked "what should we do next", "where are
-  we", "check the todo list". Syncs with main, reads goal's answer and full list, checks open pull
-  requests, and ends with one recommendation. Reads only; it starts nothing.
+  Orient at the start of a session with no task given, or when asked "what should we do next", "what can I
+  pick up now", "where are we", "check the todo list". Syncs with main, reads goal's answer and full list,
+  checks open pull requests, and ends with one recommendation. Reads only; it starts nothing.
 ---
 
 # Orient: what should we do next?
@@ -28,7 +28,7 @@ branches carry a claim mark), and answers.
    pull request. Exit 2 means the repo doesn't say enough: relay
    what it names as missing and ask the owner those questions. Never pick an item yourself instead.
    `record: issues` means the repo keeps its work in GitHub issues: list them as
-   [work-start's "Work kept in GitHub issues"](../work-start/SKILL.md#work-kept-in-github-issues) says, and
+   [start-work's "Work kept in GitHub issues"](../start-work/SKILL.md#work-kept-in-github-issues) says, and
    recommend from that list.
 
 3. **Open pull requests.** `gh pr list`: who else is working on this repo, on which branches, since the
@@ -38,7 +38,7 @@ branches carry a claim mark), and answers.
    `git log --oneline -S'<a symbol from the entry>' -- <path>` finds a fix that already landed. If it did,
    say so; the entry is deleted, citing the fix, in a docs pull request.
 5. **Recommend.** Lead with `goal`'s item, why (its reason), and the first concrete action, which is
-   `/work:work-start` on that item. Name any warning `goal` gave (over the limit, a stale claim) in one line
+   `/work:start-work` on that item. Name any warning `goal` gave (over the limit, a stale claim) in one line
    each. If asked to rank the open items, rank them all in `goal`'s order, still leading with the one.
 
 Keep the output short: what changed, who else is active, the answer, the recommendation.
