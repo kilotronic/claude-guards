@@ -4,13 +4,13 @@ description:
   Do the next piece of work in this repo, start to merged. Use for "do the next thing", "fix the next bug",
   "take the next item". To only ask what comes next, use orient. Takes next-item's item (your own claim, else the
   top free defect, else the top free item, else a cleanup), proves and claims it through start-work, builds it
-  test first, and lands it through finish-work.
+  test first, lands it through finish-work, then does the follow-ups it filed.
 ---
 
 # Do the next thing
 
-The repo's standing work loop. `next-item` decides what comes next; this skill does it. Don't keep an order of
-your own here or in the repo's docs: when the order is wrong, fix the README section or the todo file that
+The repo's standing work loop. `next-item` decides what comes next; this skill does it. The one exception is
+your own follow-ups, which come first (step 6). Don't keep any other order of your own here or in the repo's docs: when the order is wrong, fix the README section or the todo file that
 `next-item` reads.
 
 ## 1. Ask `next-item`
@@ -56,8 +56,13 @@ the last one, the limit, a rollover. The comfortable middle is where these bugs 
 ## 5. Land it
 
 Run `/work:finish-work`. It removes the entry in this work's own pull request (the claim ends when it merges), adds
-follow-ups as new entries, runs the repo's gates and review, and cleans up once the pull request shows MERGED.
+follow-ups as new entries (your next work), runs the repo's gates and review, and cleans up once the pull request
+shows MERGED.
 
 ## 6. Close out
 
-Report what landed and what follow-ups you filed. Then go back to step 1, unless the user named one item.
+Then do the follow-ups you filed, before anything `next-item` names: each one through `/work:start-work` by its
+title, one pull request at a time, steps 3 to 5, until none is left. They are part of this item, also when the
+user named it. Only one that waits on a person's decision or access, or on something that hasn't happened yet,
+stays. Report what landed, each follow-up's pull request, and what still waits and on what. Then go back to
+step 1, unless the user named one item.

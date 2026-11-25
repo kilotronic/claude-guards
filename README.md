@@ -6,7 +6,8 @@ Two [Claude Code](https://code.claude.com) plugins for agents working in a repos
   why and what to do instead, so the agent can fix its own command and carry on.
 - **work**: the `next-item` command, which answers "what should I work on next?" from what the repo states in
   writing; the skills that claim an item, build it and land it (`pr` opens the pull request and has a fresh
-  agent review it, and `pr-batch` lands several of your own as one); `long-loops` and `add-knowledge`; hooks
+  agent review it, and `pr-batch` lands several of your own as one); `coordinator`, which makes one session assign the work to
+  other agents; `long-loops` and `add-knowledge`; hooks
   around merging; and a hook that offers to share what Claude saves to memory. See [The work plugin](#the-work-plugin).
 
 The guards were written for several agents working in one repository at once, each in its own git worktree.
@@ -104,6 +105,10 @@ stays on.
 2. **else the top free defect**, one defect fix at a time;
 3. **else the top free item**, with a warning when taking it goes over the repo's limit on work in progress;
 4. **else a cleanup**: delete code, fix a test or a doc.
+
+A session's own follow-ups come before all of these: the `next` skill does each one it filed, through
+`start-work`, before asking `next-item` again. `next-item` doesn't know which follow-ups are whose, since they
+carry no claim mark.
 
 Nothing blocks: the limit and the order are warnings and advice. When the repo doesn't say enough, `next-item`
 names what is missing and exits 2; it never guesses.
@@ -234,17 +239,18 @@ merged pull request ending at the branch's tip, as a squash merge leaves it.
 
 ### The skills
 
-| Skill           | Does                                                                                                                                         |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `orient`        | What changed on main, `next-item --list`, who else is working, open pull requests, one recommendation. Reads only                            |
-| `next`          | Takes `next-item`'s item and does it, start to merged, through `start-work` and `finish-work`                                                |
-| `start-work`    | Proves the item is still open, makes the branch, commits the claim mark and opens the work's draft pull request, says what done means        |
-| `finish-work`   | Removes the entry in the work's pull request, files follow-ups, runs the gates, marks it ready; after merge, cleans up                       |
-| `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `next-item merged`. Dry run by default                              |
-| `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                      |
-| `pr`            | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed                |
-| `pr-batch`      | Lands several of your own open pull requests as one, a commit each: closes the originals, reviews and arms the batch, says where each landed |
-| `add-knowledge` | Moves a memory Claude saved into the file every session reads (a repo's CLAUDE.md or the team's rules) by pull request, or marks it personal |
+| Skill           | Does                                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `orient`        | What changed on main, `next-item --list`, who else is working, open pull requests, one recommendation. Reads only                                |
+| `next`          | Takes `next-item`'s item and does it, start to merged, through `start-work` and `finish-work`, then the follow-ups it filed                      |
+| `start-work`    | Proves the item is still open and clear of open pull requests, makes the branch, commits the claim mark, opens the draft pull request            |
+| `finish-work`   | Removes the entry in the work's pull request, files follow-ups and does them next, runs the gates, marks it ready; after merge, cleans up        |
+| `branch-prune`  | Deletes branches and worktrees whose work is merged, by the same test as `next-item merged`. Dry run by default                                  |
+| `long-loops`    | Keeps a long-running loop's finished work through a crash: whole records, saved per item, resumed by id                                          |
+| `pr`            | Opens a pull request, has a fresh reviewer agent review it against a five-item checklist, arms auto-merge, confirms it landed                    |
+| `pr-batch`      | Lands several of your own open pull requests as one, a commit each: closes the originals, reviews and arms the batch, says where each landed     |
+| `coordinator`   | Makes one session the dispatcher: assigns items in order to sessions, subagents and cloud tasks, paces by the PR and CI queues, relays questions |
+| `add-knowledge` | Moves a memory Claude saved into the file every session reads (a repo's CLAUDE.md or the team's rules) by pull request, or marks it personal     |
 
 The `pr` skill's checklist leaves out an item turned off for the repo in the guards' overrides file, by the item's
 id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat-model`).
