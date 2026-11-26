@@ -8,8 +8,8 @@ description:
 
 # Orient: what should we do next?
 
-`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
-not on `PATH`.
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, which works
+whether or not the plugin's SessionStart hook put it on `PATH`.
 
 Answer the session-start question in one pass, and end with one concrete recommendation, not a survey.
 The order of work is `next-item`'s, not this skill's: `next-item` reads the repo's README section

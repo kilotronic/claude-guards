@@ -9,8 +9,8 @@ description:
 
 # Finish an item
 
-`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
-not on `PATH`.
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, which works
+whether or not the plugin's SessionStart hook put it on `PATH`.
 
 When `next-item` answers `record: issues`, the repo keeps its work in GitHub issues: skip the todo-file steps here
 and follow [start-work's "Work kept in GitHub issues"](../start-work/SKILL.md#work-kept-in-github-issues) for

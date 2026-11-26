@@ -9,8 +9,8 @@ description:
 
 # Do the next thing
 
-`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
-not on `PATH`.
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, which works
+whether or not the plugin's SessionStart hook put it on `PATH`.
 
 The repo's standing work loop. `next-item` decides what comes next; this skill does it. The one exception is
 your own follow-ups, which come first (step 6). Don't keep any other order of your own here or in the repo's docs: when the order is wrong, fix the README section or the todo file that

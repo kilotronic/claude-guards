@@ -10,8 +10,8 @@ description:
 
 # Start an item
 
-`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
-not on `PATH`.
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, which works
+whether or not the plugin's SessionStart hook put it on `PATH`.
 
 Takes the item the user named, or `next-item`'s next item (`next-item --json`: `.next.item.title`). Do the steps in
 order; none is optional. When `next-item` answers `record: issues`, the repo keeps its work in GitHub issues instead:
