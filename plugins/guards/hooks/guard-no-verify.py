@@ -79,6 +79,11 @@ _CONFIG_VALUE_FLAGS = {
 }
 
 
+def _names_hooks_path(token: str) -> bool:
+    """git config keys ignore case: `core.hookspath` is `core.hooksPath`."""
+    return "core.hookspath" in token.lower()
+
+
 def _tokens(text: str) -> list[str]:
     """Shell words of an alias expansion."""
     lex = shlex.shlex(text, posix=True)
@@ -148,7 +153,7 @@ class _Git:
     def bypass(self) -> str | None:
         if self.sub != "commit":
             return None
-        if any("core.hooksPath" in g for g in self.globals):
+        if any(_names_hooks_path(g) for g in self.globals):
             return "core.hooksPath"
         if any(e.startswith("SKIP=") for e in self.env):
             return "SKIP="
@@ -209,7 +214,7 @@ class _Git:
 
     def disarms_hooks(self) -> bool:
         """`git config` that sets or unsets `core.hooksPath`; reading it disarms nothing."""
-        if self.sub != "config" or not any("core.hooksPath" in a for a in self.args):
+        if self.sub != "config" or not any(_names_hooks_path(a) for a in self.args):
             return False
         words, skip = [], False
         for token in self.args:
@@ -273,8 +278,11 @@ def expand_alias(git: _Git, cwd: str) -> _Git:
     for _ in range(_ALIAS_DEPTH):
         if git.sub in _KNOWN_SUBS:
             return git
+        key = f"alias.{git.sub}".lower()
         inline = [
-            g.split("=", 1)[1] for g in git.globals if g.startswith(f"alias.{git.sub}=")
+            g.split("=", 1)[1]
+            for g in git.globals
+            if "=" in g and g.split("=", 1)[0].lower() == key
         ]
         expansion = (
             inline[-1] if inline else _git(cwd, "config", "--get", f"alias.{git.sub}")

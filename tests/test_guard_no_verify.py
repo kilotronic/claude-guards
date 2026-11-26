@@ -130,6 +130,9 @@ def _bypass(command: str) -> str | None:
         ("make format && git commit --no-verify -m x", "--no-verify"),
         ("SKIP=pyright git commit -m x", "SKIP="),
         ("git -c core.hooksPath=/dev/null commit -m x", "core.hooksPath"),
+        # git config keys ignore case.
+        ("git -c core.HooksPath=/dev/null commit -m x", "core.hooksPath"),
+        ("git -c CORE.HOOKSPATH=/dev/null commit -m x", "core.hooksPath"),
         ('git commit -m "fix: a; b" --no-verify', "--no-verify"),
         ('git commit -m "one && two | three" --no-verify', "--no-verify"),
         ("timeout 60 git commit --no-verify -m x", "--no-verify"),
@@ -279,6 +282,10 @@ def test_reading_core_hooks_path_does_not_disarm_the_commit(
         "git config --add core.hooksPath /dev/null",
         "git config set core.hooksPath /dev/null",
         "git config unset core.hooksPath",
+        # git config keys ignore case.
+        "git config core.hookspath /dev/null",
+        "git config CORE.HOOKSPATH /dev/null",
+        "git config --unset Core.HooksPath",
     ],
 )
 def test_writing_core_hooks_path_disarms_the_commit(repo: Path, write: str) -> None:
@@ -391,6 +398,20 @@ def test_the_last_inline_alias_wins_as_in_git(repo: Path) -> None:
     (repo / "c.txt").write_text("c\n")
     _git(repo, "add", "c.txt")
     command = "git -c alias.k=status -c alias.k=commit k --no-verify -m x"
+    assert run_hook(command, repo) == BLOCK
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git -c ALIAS.K=commit K --no-verify -m x",
+        "git -c alias.k=commit K --no-verify -m x",
+        "git -c Alias.K=commit k --no-verify -m x",
+    ],
+)
+def test_an_inline_alias_ignores_case_as_in_git(repo: Path, command: str) -> None:
+    (repo / "c.txt").write_text("c\n")
+    _git(repo, "add", "c.txt")
     assert run_hook(command, repo) == BLOCK
 
 
