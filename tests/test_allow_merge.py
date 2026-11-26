@@ -121,7 +121,6 @@ def _command_line() -> str:
         for group in hooks["PreToolUse"]
         if group.get("matcher") == "Bash"
         for hook in group["hooks"]
-        if "allow-merge.py" in hook["command"]
     ]
     assert len(found) == 1, found
     return found[0]
@@ -148,9 +147,13 @@ def test_as_claude_code_runs_it_the_answer_is_on_stdout() -> None:
 
 
 def test_as_claude_code_runs_it_bad_input_and_other_commands_say_nothing() -> None:
-    for stdin in ("not json", json.dumps(bash("gh pr merge 3 --admin")), ""):
+    for stdin in ("not json", ""):
         done = _run(stdin)
         assert (done.returncode, done.stdout) == (0, ""), stdin
+    # The review check shares the command line and may warn; no allow is given.
+    done = _run(json.dumps(bash("gh pr merge 3 --admin")))
+    assert done.returncode == 0, done.stderr
+    assert "permissionDecision" not in done.stdout, done.stdout
 
 
 def test_it_answers_under_the_oldest_python_the_hooks_support() -> None:

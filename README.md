@@ -54,6 +54,13 @@ boundary: a determined agent, or a person, can get around any of them.
 **A guard that fails never blocks.** If a hook hits an error or can't read its input, it lets the command
 through.
 
+**One process per Bash call.** On a Bash call the guards run one after another in one process,
+`bash-guards.py`, in a fixed order (its `GUARDS` list), so a call starts one interpreter, not ten. Each guard is still
+its own file and runs alone too (an event on stdin). Its refusal reads as it would alone; when several refuse,
+the agent gets every refusal, a blank line apart. A guard that fails lets the command through for itself only:
+the others still run, and a crash shows as a hook error when none refuses. The polling guard on Monitor, the secret guard on Read and Grep, and the edit guard keep
+entries of their own. See [the design note](docs/design/2026-11-26-bash-guard-dispatcher.md).
+
 ## Turning a rule off for a repo
 
 Some repos really do work on `main`, a dotfiles repo for example. You can turn a rule off for one repo, or
@@ -270,6 +277,9 @@ The `pr` skill's checklist leaves out an item turned off for the repo in the gua
 id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat-model`).
 
 ### The hooks
+
+On a Bash call the work plugin's Bash hooks (`allow-merge.py`, `review-check.py`) run in one process,
+`bash-hooks.py`, which merges their answers: the strictest permission decision with its reason, and every warning.
 
 - **`next-item` and `park` run by name** (`scripts-on-path.py`). At every session start, resume, `/clear` and
   compaction it puts the plugin's `scripts/` on the Bash tool's `PATH`, as [The work plugin](#the-work-plugin) describes.

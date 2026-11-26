@@ -283,7 +283,7 @@ class ReviewCheck(unittest.TestCase):
             h["timeout"]
             for g in hooks
             for h in g["hooks"]
-            if "review-check.py" in h["command"]
+            if g.get("matcher") == "Bash"
         )
         self.assertLess(review_check.BUDGET + 2, limit)
         self.assertLessEqual(review_check.GH_TIMEOUT, review_check.BUDGET)
@@ -371,7 +371,7 @@ class AsClaudeCodeRunsIt(unittest.TestCase):
             if group.get("matcher") == "Bash"
             for h in group["hooks"]
         ]
-        found = [c for c in commands if "review-check.py" in c]
+        found = [c for c in commands if "bash-hooks.py" in c]
         self.assertEqual(len(found), 1, commands)
         self.command = found[0]
         self.bin = tempfile.TemporaryDirectory()
