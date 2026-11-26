@@ -164,6 +164,11 @@ def test_names_every_bypass_spelling(command: str, kind: str) -> None:
         "git commit -q -F <(sed -n '1,$p' <<'EOF'\nchore: x\nEOF\n)",
         "git commit -F <(printf '%s' msg | head -n 5)",
         "git commit -m x 2> >(tee -a log -n)",
+        # A message that is exactly a bypass spelling is still the message.
+        "git commit -m --no-verify",
+        "git commit -m -n",
+        # `-mfinal`'s `n` is a letter of the message, not `-n`.
+        "git commit -mfinal",
     ],
 )
 def test_ignores_commits_that_run_the_hooks_and_mere_mentions(command: str) -> None:
@@ -189,11 +194,9 @@ def test_allows_the_sanctioned_squash_recipe(repo: Path) -> None:
         "git reset --soft origin/main && git commit --no-verify -mfinal",
     ],
 )
-def test_a_short_flag_group_s_message_is_not_a_pathspec_or_a_flag(
-    repo: Path, command: str
-) -> None:
-    """`-qm x` takes `x` as its message, and `-mfinal`'s `n` and `a` are the
-    message's letters, as git reads them."""
+def test_a_short_flag_group_message_is_not_a_pathspec(repo: Path, command: str) -> None:
+    """`-qm x` takes `x` as its message, and `-mfinal`'s `a` is a letter of
+    the message, not `-a`, as git reads them."""
     assert run_hook(command, repo) == ALLOW
 
 
@@ -245,10 +248,8 @@ def test_a_commit_message_from_a_process_substitution_runs_the_hooks(
     `<(...)` was read as the commit's own flag."""
     (repo / "c.txt").write_text("c\n")
     command = (
-        "python3 - <<'EOF'\nprint('pytest -n 2')\nEOF\n"
         "git add -A && git commit -q -F <(sed -n '1,$p' <<'EOF'\n"
-        "chore: run xcodebuild at nice 10\n\nBody with -n and --no-verify.\nEOF\n"
-        ") > /dev/null 2>&1; echo rc=$?"
+        "chore: x\n\nBody with -n and --no-verify.\nEOF\n)"
     )
     assert run_hook(command, repo) == ALLOW
 
@@ -322,12 +323,6 @@ def test_the_last_inline_alias_wins_as_in_git(repo: Path) -> None:
     _git(repo, "add", "c.txt")
     command = "git -c alias.k=status -c alias.k=commit k --no-verify -m x"
     assert run_hook(command, repo) == BLOCK
-
-
-def test_a_message_that_names_the_flag_is_not_a_bypass(repo: Path) -> None:
-    (repo / "c.txt").write_text("c\n")
-    _git(repo, "add", "c.txt")
-    assert run_hook('git commit -m "--no-verify is refused"', repo) == ALLOW
 
 
 def test_an_aliased_reword_with_nothing_staged_is_still_allowed(aliased: Path) -> None:
