@@ -70,7 +70,7 @@ _CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list
 _CONFIG_READ_FLAGS = {
     "--global", "--system", "--local", "--worktree", "--show-origin", "--show-scope", "--show-names",
     "--name-only", "--null", "-z", "--includes", "--no-includes", "--all", "--regexp", "--fixed-value",
-    "--bool", "--int", "--bool-or-int", "--path", "--expiry-date", "--no-type",
+    "--bool", "--int", "--bool-or-int", "--bool-or-str", "--path", "--expiry-date", "--no-type",
 }  # fmt: skip
 _CONFIG_VALUE_FLAGS = {"-f", "-t", "--file", "--blob", "--type", "--default", "--comment", "--value", "--url"}  # fmt: skip
 
@@ -80,16 +80,33 @@ def _names_hooks_path(token: str) -> bool:
     return "core.hookspath" in token.lower()
 
 
+_SECTION_MODES = {"--remove-section", "--rename-section"}
+
+
 def _names_hooks_section(args: list[str]) -> bool:
     """The key, or its whole `core` section (`--remove-section core` drops it unnamed)."""
-    return any(_names_hooks_path(a) or a.lower() == "core" for a in args)
+    return any(_names_hooks_path(a) for a in args) or any(
+        word.lower() == "core"
+        and (
+            before in ("remove-section", "rename-section")
+            or _long_prefix(before, _SECTION_MODES)
+        )
+        for before, word in zip(args, args[1:])  # noqa: RUF007 - pairwise needs Python 3.10
+    )
+
+
+def _edits(args: list[str]) -> bool:
+    """`git config --edit` can set any key, named or not."""
+    return args[:1] == ["edit"] or any(
+        a == "-e" or _long_prefix(a, {"--edit"}) for a in args
+    )
 
 
 def _long_prefix(token: str, options: set[str]) -> bool:
     """git takes a unique prefix of a long option: `--mess` is `--message`."""
     return (
         token.startswith("--")
-        and len(token) > 3
+        and len(token) > 2
         and any(o.startswith(token) for o in options)
     )
 
@@ -230,7 +247,11 @@ class _Git:
 
     def disarms_hooks(self) -> bool:
         """`git config` naming `core.hooksPath` or its section, unless it parses as a plain read."""
-        if self.sub != "config" or not _names_hooks_section(self.args):
+        if self.sub != "config":
+            return False
+        if _edits(self.args):
+            return True
+        if not _names_hooks_section(self.args):
             return False
         args = self.args
         mode = None
@@ -242,7 +263,7 @@ class _Git:
                 skip = False
             elif words:
                 words.append(token)  # git stops reading options at the key
-            elif token in _CONFIG_READS and mode is None:
+            elif token in _CONFIG_READS:
                 mode = token
             elif token in _CONFIG_VALUE_FLAGS:
                 skip = True

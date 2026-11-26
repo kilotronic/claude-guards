@@ -4,6 +4,12 @@ Follow-ups for this repo's plugins, top first. An entry is deleted, not ticked, 
 
 ## Defects
 
+- **The no-verify guard doesn't see the hooks path set through the environment.** `GIT_CONFIG_COUNT=1
+GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x` and
+  `git --config-env=core.hooksPath=HP commit` commit with no hooks and are allowed: `bypass()` reads only `SKIP=`
+  in the environment and `-c` in git's options. Found reviewing #53; none seen in a real session. Shape: read
+  `GIT_CONFIG_KEY_<n>` and `--config-env` as `-c` is read.
+
 - **The stash guard calls `git rebase --autostash` safe, but a conflict puts the changes in the shared stash.**
   Its refusal says the autostash "lives in this worktree's own rebase dir, so it cannot race". That holds
   until the changes fail to re-apply after the rebase: git then keeps them as `stash@{0}: autostash` in

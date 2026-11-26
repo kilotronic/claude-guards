@@ -277,6 +277,11 @@ def test_refuses_an_index_write_in_the_same_command(repo: Path, command: str) ->
         "git config --list",
         "git config list --show-origin",
         "git -c alias.cf=config cf core.hooksPath",
+        "git config get --value x core.hooksPath",
+        "git config get --url https://example.invalid core.hooksPath",
+        "git config --bool-or-str --get core.hooksPath",
+        # `core` as a plain value is not the section.
+        "git config user.name core",
     ],
 )
 def test_reading_core_hooks_path_does_not_disarm_the_commit(
@@ -320,6 +325,10 @@ def test_reading_core_hooks_path_does_not_disarm_the_commit(
         # An alias for `config`.
         "git -c alias.cf=config cf core.hooksPath /dev/null",
         "git -c alias.hp='config core.hooksPath' hp /dev/null",
+        # The editor can set any key.
+        "GIT_EDITOR=true git config --edit",
+        "git config -e",
+        "git config edit",
     ],
 )
 def test_writing_core_hooks_path_disarms_the_commit(repo: Path, write: str) -> None:
@@ -355,12 +364,21 @@ def test_a_dry_run_commits_nothing_so_skips_nothing(repo: Path, command: str) ->
         "git commit -n --porcelain --no-porc -m x",
         # `--mess` is `--message`, so `--dry-run` is the message and this commits.
         "git commit --no-verify --mess --dry-run",
+        # A one-letter prefix counts when it is unique.
+        "git commit --no-verify --m --dry-run",
+        "git commit --no-verify --long --no-l -m x",
+        "git commit --no-verify --null --no-n -m x",
+        "git commit --no-verify -z --no-n -m x",
     ],
 )
 def test_an_abbreviated_option_can_undo_a_dry_run(repo: Path, command: str) -> None:
     (repo / "c.txt").write_text("c\n")
     _git(repo, "add", "c.txt")
     assert run_hook(command, repo) == BLOCK
+
+
+def test_an_abbreviated_message_on_a_reword_is_not_a_pathspec(repo: Path) -> None:
+    assert run_hook("git commit --amend --no-verify --mess x", repo) == ALLOW
 
 
 @pytest.mark.parametrize(
