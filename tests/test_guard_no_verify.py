@@ -241,6 +241,75 @@ def test_refuses_an_index_write_in_the_same_command(repo: Path, command: str) ->
     assert run_hook(command, repo) == BLOCK
 
 
+@pytest.mark.parametrize(
+    "read",
+    [
+        "git config core.hooksPath",
+        "git config --get core.hooksPath",
+        "git config --get-all core.hooksPath",
+        "git config --show-origin --get core.hooksPath",
+        "git config --global core.hooksPath",
+        "git config --type=path core.hooksPath",
+        "git config --file .git/config core.hooksPath",
+        "git config --default none --get core.hooksPath",
+        "git config get core.hooksPath",
+        "git config get --all --show-origin core.hooksPath",
+    ],
+)
+def test_reading_core_hooks_path_does_not_disarm_the_commit(
+    repo: Path, read: str
+) -> None:
+    """Only a write redirects the hooks; a read before a commit is a look."""
+    (repo / "c.txt").write_text("c\n")
+    _git(repo, "add", "c.txt")
+    assert run_hook(f"{read}; git commit -m x", repo) == ALLOW
+
+
+@pytest.mark.parametrize(
+    "write",
+    [
+        "git config core.hooksPath /dev/null",
+        "git config core.hooksPath ''",
+        "git config --global core.hooksPath /dev/null",
+        "git config --file .git/config core.hooksPath /dev/null",
+        "git config --type=path core.hooksPath /dev/null",
+        "git config --unset core.hooksPath",
+        "git config --unset-all core.hooksPath",
+        "git config --replace-all core.hooksPath /dev/null",
+        "git config --add core.hooksPath /dev/null",
+        "git config set core.hooksPath /dev/null",
+        "git config unset core.hooksPath",
+    ],
+)
+def test_writing_core_hooks_path_disarms_the_commit(repo: Path, write: str) -> None:
+    (repo / "c.txt").write_text("c\n")
+    _git(repo, "add", "c.txt")
+    assert run_hook(f"{write}; git commit -m x", repo) == BLOCK
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git commit --dry-run --no-verify -m x",
+        "git commit -n --short",
+        "SKIP=ruff git commit --porcelain -m x",
+        "git -c core.hooksPath=/dev/null commit --long",
+        "git config core.hooksPath /dev/null; git commit --dry-run -m x",
+    ],
+)
+def test_a_dry_run_commits_nothing_so_skips_nothing(repo: Path, command: str) -> None:
+    """`--short`, `--porcelain` and `--long` imply `--dry-run`."""
+    (repo / "c.txt").write_text("c\n")
+    _git(repo, "add", "c.txt")
+    assert run_hook(command, repo) == ALLOW
+
+
+def test_a_dry_run_after_the_pathspec_separator_is_a_path(repo: Path) -> None:
+    (repo / "c.txt").write_text("c\n")
+    _git(repo, "add", "c.txt")
+    assert run_hook("git commit --no-verify -m x -- --dry-run", repo) == BLOCK
+
+
 def test_a_commit_message_from_a_process_substitution_runs_the_hooks(
     repo: Path,
 ) -> None:

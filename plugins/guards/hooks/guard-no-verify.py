@@ -49,6 +49,8 @@ _OUTSIDE_INDEX = {
     "--patch",
     "--interactive",
 }
+# `--short`, `--porcelain` and `--long` imply `--dry-run`.
+_DRY_RUN = {"--dry-run", "--short", "--porcelain", "--long"}
 _SHORT_FLAGS = re.compile(r"^-[a-zA-Z]+$")
 # Short options of `git commit` that take a value, attached or as the next word: in `-mfinal` the `m` takes
 # `final`, so its `n` is not `-n`.
@@ -62,6 +64,19 @@ _INDEX_WRITERS = {
     "add", "rm", "mv", "restore", "checkout", "apply", "stash", "cherry-pick",
     "merge", "rebase", "revert", "read-tree", "update-index", "reset",
 }  # fmt: skip
+
+# `git config` modes that say outright whether it writes; otherwise a value after the key does.
+_CONFIG_WRITES = {"--unset", "--unset-all", "--replace-all", "--add"}
+_CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l"}
+_CONFIG_VALUE_FLAGS = {
+    "-f",
+    "--file",
+    "--blob",
+    "--type",
+    "--default",
+    "--comment",
+    "--value",
+}
 
 
 def _tokens(text: str) -> list[str]:
@@ -160,6 +175,10 @@ class _Git:
                 skip = _takes_next(token)
         return out
 
+    def dry_run(self) -> bool:
+        """Commits nothing and runs no hooks, so there is nothing to bypass."""
+        return bool(_DRY_RUN & set(self._flags()))
+
     def commits_outside_the_index(self) -> bool:
         """`-a`, `--include`, `--only` or a pathspec: content the index tree cannot vouch for."""
         skip = False
@@ -189,7 +208,26 @@ class _Git:
         return self.sub in _INDEX_WRITERS
 
     def disarms_hooks(self) -> bool:
-        return self.sub == "config" and any("core.hooksPath" in a for a in self.args)
+        """`git config` that sets or unsets `core.hooksPath`; reading it disarms nothing."""
+        if self.sub != "config" or not any("core.hooksPath" in a for a in self.args):
+            return False
+        words, skip = [], False
+        for token in self.args:
+            if skip:
+                skip = False
+            elif token in _CONFIG_WRITES:
+                return True
+            elif token in _CONFIG_READS:
+                return False
+            elif token in _CONFIG_VALUE_FLAGS:
+                skip = True
+            elif not token.startswith("-"):
+                words.append(token)
+        if words[:1] in (["set"], ["unset"]):
+            return True
+        if words[:1] in (["get"], ["list"]):
+            return False
+        return len(words) > 1  # `git config <key> <value>`; the key alone is a read
 
     def cwd(self, base: str) -> str:
         for i, token in enumerate(self.globals):
@@ -280,6 +318,8 @@ def refusal(command: str, cwd: str) -> tuple[str, str] | None:
         git = expand_alias(git, git.cwd(here))
         if git.sub != "commit":  # only `git commit` runs pre-commit
             index_written = index_written or git.writes_index()
+            continue
+        if git.dry_run():
             continue
         kind = git.bypass() or disarmed
         if kind is None:
