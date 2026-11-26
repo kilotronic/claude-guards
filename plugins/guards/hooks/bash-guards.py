@@ -15,6 +15,7 @@ import importlib.util
 import io
 import os
 import sys
+import traceback
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -45,7 +46,7 @@ def load(name: str):
 
 
 def run_one(name: str, event: str) -> tuple[int, str]:
-    """(The guard's exit code, what it wrote to stderr); (0, "") when it fails."""
+    """(The guard's exit code, what it wrote to stderr); a crash is (1, its traceback), as when it runs alone."""
     err = io.StringIO()
     try:
         module = load(name)
@@ -58,10 +59,10 @@ def run_one(name: str, event: str) -> tuple[int, str]:
     except SystemExit as stop:
         code = stop.code
     except Exception:  # noqa: BLE001 - a broken guard must not block work, nor stop the others
-        return 0, ""
+        return 1, traceback.format_exc()
     finally:
         sys.stdin = sys.__stdin__
-    return (2, err.getvalue()) if code == 2 else (0, "")
+    return (code, err.getvalue()) if code in (1, 2) else (0, "")
 
 
 def main() -> int:
@@ -69,11 +70,14 @@ def main() -> int:
         event = sys.stdin.read()
     except Exception:  # noqa: BLE001
         return 0
-    refusals = [text for code, text in (run_one(g, event) for g in GUARDS) if code == 2]
-    if not refusals:
-        return 0
-    sys.stderr.write("\n".join(r.rstrip("\n") + "\n" for r in refusals))
-    return 2
+    results = [run_one(g, event) for g in GUARDS]
+    # A refusal blocks; else a crash exits 1, which Claude Code shows as a hook error and lets the call through.
+    for want in (2, 1):
+        texts = [text for code, text in results if code == want]
+        if texts:
+            sys.stderr.write("\n".join(t.rstrip("\n") + "\n" for t in texts))
+            return want
+    return 0
 
 
 if __name__ == "__main__":

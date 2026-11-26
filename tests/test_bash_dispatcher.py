@@ -285,3 +285,92 @@ def _dispatcher_module_work():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _broken_guards(tmp_path: Path, body: str) -> tuple[Path, str]:
+    copy = tmp_path / "guards"
+    shutil.copytree(GUARDS, copy)
+    broken = copy / "hooks" / "guard-admin-merge.py"
+    broken.write_text(
+        broken.read_text().replace(
+            "def refusal(event: dict) -> str | None:\n",
+            f"def refusal(event: dict) -> str | None:\n    {body}\n",
+        )
+    )
+    return copy, _bash_entries(GUARDS)[0].replace("${CLAUDE_PLUGIN_ROOT}", str(copy))
+
+
+def test_a_crash_with_no_refusal_shows_as_a_hook_error(
+    tmp_path: Path, dirty_main: Path
+) -> None:
+    """As when the guard runs alone: a guard with its own `main()` (not `guardlib.run`) exits 1 on a crash."""
+    copy = tmp_path / "guards"
+    shutil.copytree(GUARDS, copy)
+    broken = copy / "hooks" / "guard-commit-on-main.py"
+    broken.write_text(
+        broken.read_text().replace(
+            "def main() -> int:\n",
+            "def main() -> int:\n    raise RuntimeError('boom')\n",
+        )
+    )
+    command = _bash_entries(GUARDS)[0].replace("${CLAUDE_PLUGIN_ROOT}", str(copy))
+    event = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "ls"},
+        "cwd": str(dirty_main),
+    }
+    alone = _run(copy, f'"{broken}"', event)
+    done = _run(copy, command, event)
+    assert (alone.returncode, done.returncode) == (1, 1), done.stderr
+    assert "RuntimeError: boom" in done.stderr
+
+
+def test_a_guard_that_exits_2_refuses_with_what_it_wrote(
+    tmp_path: Path, dirty_main: Path
+) -> None:
+    copy, command = _broken_guards(
+        tmp_path, "sys.stderr.write('stopped\\n'); sys.exit(2)"
+    )
+    event = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "ls"},
+        "cwd": str(dirty_main),
+    }
+    done = _run(copy, command, event)
+    assert (done.returncode, done.stderr) == (2, "stopped\n")
+
+
+def test_deny_outranks_ask_and_every_context_is_kept() -> None:
+    hooks = _dispatcher_module_work()
+
+    def said(decision: str, context: str) -> dict:
+        return {
+            "hookSpecificOutput": {
+                "permissionDecision": decision,
+                "permissionDecisionReason": decision,
+                "additionalContext": context,
+            }
+        }
+
+    merged = hooks.merge([said("deny", "one"), said("ask", "two")])
+    specific = merged["hookSpecificOutput"]
+    assert specific["permissionDecision"] == "deny"
+    assert specific["additionalContext"] == "one\ntwo"
+
+
+def test_a_work_hook_crash_with_no_answer_shows_as_a_hook_error(tmp_path: Path) -> None:
+    copy = tmp_path / "work"
+    shutil.copytree(WORK, copy)
+    broken = copy / "hooks" / "review-check.py"
+    broken.write_text(broken.read_text().replace("def decide(\n", "def decide_(\n"))
+    done = subprocess.run(
+        _bash_entries(WORK)[0],
+        shell=True,
+        input=json.dumps(_work_event("gh pr merge 3", mode="default")),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(copy)},
+        check=False,
+    )
+    assert (done.returncode, done.stdout) == (1, ""), done.stderr
+    assert "AttributeError" in done.stderr

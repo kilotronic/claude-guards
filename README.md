@@ -55,10 +55,10 @@ boundary: a determined agent, or a person, can get around any of them.
 through.
 
 **One process per Bash call.** On a Bash call the guards run one after another in one process,
-`bash-guards.py`, in the order of the table above, so a call starts one interpreter, not ten. Each guard is still
+`bash-guards.py`, in a fixed order (its `GUARDS` list), so a call starts one interpreter, not ten. Each guard is still
 its own file and runs alone too (an event on stdin). Its refusal reads as it would alone; when several refuse,
 the agent gets every refusal, a blank line apart. A guard that fails lets the command through for itself only:
-the others still run. The polling guard on Monitor, the secret guard on Read and Grep, and the edit guard keep
+the others still run, and a crash shows as a hook error when none refuses. The polling guard on Monitor, the secret guard on Read and Grep, and the edit guard keep
 entries of their own. See [the design note](docs/design/2026-11-26-bash-guard-dispatcher.md).
 
 ## Turning a rule off for a repo

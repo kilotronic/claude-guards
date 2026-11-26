@@ -30,7 +30,9 @@ runs `bash-guards.py` (guards) or `bash-hooks.py` (work). A Bash call then start
   exits 2. Today Claude Code shows each hook's refusal separately; the agent now gets them in one message.
 - **A guard that fails never blocks, and now fails alone.** Each guard runs inside its own `try`: an exception,
   or a `SystemExit` with a code other than 2, lets the command through for that guard only, and the others still
-  run. Before, a crash also failed open for that guard only, since each was its own process.
+  run. Before, a crash also failed open for that guard only, since each was its own process. A crash stays
+  visible: when no guard refuses, the dispatcher writes the traceback and exits 1, which Claude Code shows as a
+  hook error and lets the call through, as it did for the guard alone.
 - **Reading the event.** The dispatcher reads stdin once; unreadable input exits 0, as each guard did.
 
 ## What changes
@@ -40,7 +42,8 @@ runs `bash-guards.py` (guards) or `bash-hooks.py` (work). A Bash call then start
   and 15 s for the work hooks (`review-check.py`'s 9 s GitHub budget plus margin, as before). On an ordinary
   call they take tens of milliseconds together. A guard that hangs past the limit now fails open for all of them
   at once, where before it failed open for itself only; no guard has hung in the transcripts, and every
-  subprocess a guard starts has a timeout.
+  subprocess a guard starts has a timeout except the ours-theirs guard's `git cat-file --batch` read, which the
+  todo's ours-theirs entry already proposes to cap.
 - **Other tools keep their own entries.** Only the Bash entry is merged. The polling guard keeps a `Monitor`
   entry and the secret guard a `Read|Grep` entry, each still one process for those tools, and the edit guard
   keeps its `Edit|Write|MultiEdit|NotebookEdit` entry.
@@ -53,7 +56,9 @@ runs `bash-guards.py` (guards) or `bash-hooks.py` (work). A Bash call then start
 The work plugin can be installed without the guards plugin, so it keeps a dispatcher of its own: `bash-hooks.py`
 imports `allow-merge.py` and `review-check.py` and calls each one's `decide(event)`. Each answers with a hook
 JSON object or nothing; the dispatcher merges them into one: the strictest `permissionDecision` (deny, then ask,
-then allow) with its reason, and the `additionalContext` and `systemMessage` texts joined. A `gh pr merge` in
+then allow) with its reason, and the `additionalContext` and `systemMessage` texts joined. Other top-level keys (`continue`, `stopReason`) are
+not carried over when both answer, since neither hook writes them. A hook that crashes leaves its traceback on
+stderr, and exits 1 when no hook answered. A `gh pr merge` in
 auto mode with no review comment so gets both the allow and the warning, as it did from two processes. Each
 `decide` runs in its own `try`, so a crash in one leaves the other's answer.
 
