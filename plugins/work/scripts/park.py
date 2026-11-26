@@ -108,7 +108,7 @@ def park(hook: dict, run, host: str) -> str:
         f"Parked at a usage limit: {reason}\n\n"
         f"- Branch `{branch}`, {where}.\n"
         f"- Same machine: `claude --resume {session}` in the work's folder.\n"
-        f"- Any machine: `park resume {number}`, then work on `{branch}`."
+        f"- Any machine: `park resume {number}` (the work plugin's `scripts/park`), then work on `{branch}`."
     )
     run(["gh", "pr", "comment", number, "--body", body], top)
     return f"park: #{number} labeled {LABEL}; {where}"

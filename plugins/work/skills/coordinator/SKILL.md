@@ -111,8 +111,8 @@ Notifications and `SendMessage` replies wake you; otherwise schedule one wake 20
   ended, to a new worker as its item;
 - a worker silent, with no worktree activity for an hour, gets one `SendMessage`. Still silent and nothing
   running on its machine: tell the person, and with their OK drop its claim by closing its pull request;
-- a lane stopped by a usage limit resumes on the same model, by `SendMessage` or `park resume <n>`, never sent
-  to a new worker;
+- a lane stopped by a usage limit resumes on the same model, by `SendMessage` or
+  `"${CLAUDE_PLUGIN_ROOT}/scripts/park" resume <n>`, never sent to a new worker;
 - a worker whose pull request merged goes on to its own follow-ups. For one that has ended, resume it with its
   follow-ups by `SendMessage`, or give each out as a new item (a cloud task can't be resumed). A worker with
   none left is idle: back to step 3.
