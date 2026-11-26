@@ -49,6 +49,8 @@ _OUTSIDE_INDEX = {
     "--patch",
     "--interactive",
 }
+# `--short`, `--porcelain`, `--long` and `-z` imply `--dry-run`.
+_DRY_RUN = {"--dry-run", "--short", "--porcelain", "--long", "-z", "--null"}
 _SHORT_FLAGS = re.compile(r"^-[a-zA-Z]+$")
 # Short options of `git commit` that take a value, attached or as the next word: in `-mfinal` the `m` takes
 # `final`, so its `n` is not `-n`.
@@ -62,6 +64,24 @@ _INDEX_WRITERS = {
     "add", "rm", "mv", "restore", "checkout", "apply", "stash", "cherry-pick",
     "merge", "rebase", "revert", "read-tree", "update-index", "reset",
 }  # fmt: skip
+
+# `git config` modes that say outright whether it writes; otherwise a value after the key does.
+_CONFIG_WRITES = {"--unset", "--unset-all"}
+_CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l"}
+_CONFIG_VALUE_FLAGS = {
+    "-f",
+    "-t",
+    "--file",
+    "--blob",
+    "--type",
+    "--default",
+    "--comment",
+}
+
+
+def _names_hooks_path(token: str) -> bool:
+    """git config keys ignore case: `core.hookspath` is `core.hooksPath`."""
+    return "core.hookspath" in token.lower()
 
 
 def _tokens(text: str) -> list[str]:
@@ -133,7 +153,7 @@ class _Git:
     def bypass(self) -> str | None:
         if self.sub != "commit":
             return None
-        if any("core.hooksPath" in g for g in self.globals):
+        if any(_names_hooks_path(g) for g in self.globals):
             return "core.hooksPath"
         if any(e.startswith("SKIP=") for e in self.env):
             return "SKIP="
@@ -159,6 +179,16 @@ class _Git:
                 out.append(token)
                 skip = _takes_next(token)
         return out
+
+    def dry_run(self) -> bool:
+        """Commits nothing and runs no hooks, so there is nothing to bypass."""
+        dry = False  # the last of `--dry-run` and `--no-dry-run` wins, as in git
+        for flag in self._flags():
+            if flag in _DRY_RUN:
+                dry = True
+            elif flag.startswith("--no-") and f"--{flag[5:]}" in _DRY_RUN:
+                dry = False
+        return dry
 
     def commits_outside_the_index(self) -> bool:
         """`-a`, `--include`, `--only` or a pathspec: content the index tree cannot vouch for."""
@@ -189,7 +219,24 @@ class _Git:
         return self.sub in _INDEX_WRITERS
 
     def disarms_hooks(self) -> bool:
-        return self.sub == "config" and any("core.hooksPath" in a for a in self.args)
+        """`git config` that sets or unsets `core.hooksPath`; reading it disarms nothing."""
+        if self.sub != "config" or not any(_names_hooks_path(a) for a in self.args):
+            return False
+        words, skip = [], False
+        for token in self.args:
+            if skip:
+                skip = False
+            elif token in _CONFIG_WRITES:
+                return True
+            elif token in _CONFIG_READS:
+                return False
+            elif token in _CONFIG_VALUE_FLAGS:
+                skip = True
+            elif not token.startswith("-"):
+                words.append(token)
+        if words[:1] in (["get"], ["list"]):
+            return False
+        return len(words) > 1  # `<key> <value>`, `set <key> <value>`, `unset <key>`
 
     def cwd(self, base: str) -> str:
         for i, token in enumerate(self.globals):
@@ -235,8 +282,11 @@ def expand_alias(git: _Git, cwd: str) -> _Git:
     for _ in range(_ALIAS_DEPTH):
         if git.sub in _KNOWN_SUBS:
             return git
+        key = f"alias.{git.sub}".lower()
         inline = [
-            g.split("=", 1)[1] for g in git.globals if g.startswith(f"alias.{git.sub}=")
+            g.split("=", 1)[1]
+            for g in git.globals
+            if "=" in g and g.split("=", 1)[0].lower() == key
         ]
         expansion = (
             inline[-1] if inline else _git(cwd, "config", "--get", f"alias.{git.sub}")
@@ -280,6 +330,8 @@ def refusal(command: str, cwd: str) -> tuple[str, str] | None:
         git = expand_alias(git, git.cwd(here))
         if git.sub != "commit":  # only `git commit` runs pre-commit
             index_written = index_written or git.writes_index()
+            continue
+        if git.dry_run():
             continue
         kind = git.bypass() or disarmed
         if kind is None:
