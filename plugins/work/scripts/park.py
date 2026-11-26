@@ -108,7 +108,7 @@ def park(hook: dict, run, host: str) -> str:
         f"Parked at a usage limit: {reason}\n\n"
         f"- Branch `{branch}`, {where}.\n"
         f"- Same machine: `claude --resume {session}` in the work's folder.\n"
-        f"- Any machine: `park resume {number}`, then work on `{branch}`."
+        f"- Any machine: `park resume {number}` (the work plugin's `scripts/park`), then work on `{branch}`."
     )
     run(["gh", "pr", "comment", number, "--body", body], top)
     return f"park: #{number} labeled {LABEL}; {where}"
@@ -127,7 +127,8 @@ def notice(cwd: str, run) -> str:
         return ""
     if not prs:
         return ""
-    lines = ["Parked work (take one with `park resume <n>`):"]
+    park_cmd = os.path.join(os.path.dirname(os.path.realpath(__file__)), "park")
+    lines = [f'Parked work (take one with `"{park_cmd}" resume <n>`):']
     lines += [f"  #{p['number']} {p['title']} ({p['headRefName']})" for p in prs]
     return "\n".join(lines)
 

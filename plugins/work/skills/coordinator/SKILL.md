@@ -10,6 +10,9 @@ description:
 
 # Coordinate: assign, unblock, pace
 
+`next-item` and `park` are this plugin's commands: run them as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"` and
+`"${CLAUDE_PLUGIN_ROOT}/scripts/park"`, not bare, since they are not on `PATH`.
+
 One session holds this role per repo. It is a dispatcher. It never writes the work, judges a diff, decides a
 design question or reviews a change itself: each worker claims, builds, reviews and lands its own item through the
 `next` skill. The coordinator keeps no state of its own: open pull requests are the claims and `next-item --list`
@@ -22,7 +25,7 @@ changes land alone, its design-review skill, and how its questions to the owner 
 
 ```bash
 git -C <main checkout> pull --ff-only
-next-item --list           # the order, the claims, stale claims
+"${CLAUDE_PLUGIN_ROOT}/scripts/next-item" --list   # the order, the claims, stale claims
 gh pr list --state open --json number,title,headRefName,isDraft,updatedAt,author,autoMergeRequest,mergeable
 gh run list --limit 100 --json status,headBranch,createdAt
 ```
@@ -108,8 +111,8 @@ Notifications and `SendMessage` replies wake you; otherwise schedule one wake 20
   ended, to a new worker as its item;
 - a worker silent, with no worktree activity for an hour, gets one `SendMessage`. Still silent and nothing
   running on its machine: tell the person, and with their OK drop its claim by closing its pull request;
-- a lane stopped by a usage limit resumes on the same model, by `SendMessage` or `park resume <n>`, never sent
-  to a new worker;
+- a lane stopped by a usage limit resumes on the same model, by `SendMessage` or
+  `"${CLAUDE_PLUGIN_ROOT}/scripts/park" resume <n>`, never sent to a new worker;
 - a worker whose pull request merged goes on to its own follow-ups. For one that has ended, resume it with its
   follow-ups by `SendMessage`, or give each out as a new item (a cloud task can't be resumed). A worker with
   none left is idle: back to step 3.

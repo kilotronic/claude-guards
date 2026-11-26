@@ -10,6 +10,9 @@ description:
 
 # Start an item
 
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
+not on `PATH`.
+
 Takes the item the user named, or `next-item`'s next item (`next-item --json`: `.next.item.title`). Do the steps in
 order; none is optional. When `next-item` answers `record: issues`, the repo keeps its work in GitHub issues instead:
 follow [Work kept in GitHub issues](#work-kept-in-github-issues) below.
@@ -22,7 +25,7 @@ The todo list lags reality; redoing shipped work is the costly mistake. Before c
 git fetch -q origin
 git log --oneline -S'<a symbol or phrase from the entry>' origin/main -- <path>   # did a fix land?
 git branch -r --list '*<a word from the title>*'                                  # related branches
-next-item merged <a related branch>                                               # exit 0: on main already
+"${CLAUDE_PLUGIN_ROOT}/scripts/next-item" merged <a related branch>   # exit 0: on main already
 ```
 
 If the fix already landed, don't claim: delete the entry (a plan row: its file) in a small docs pull request,
@@ -57,10 +60,10 @@ there, so the repo's commit hooks need what the set-up installs.
 In the worktree, in this order:
 
 ```bash
-next-item claim '<the entry's title>'   # checks the open pull requests, then commits the mark as the first commit
+"${CLAUDE_PLUGIN_ROOT}/scripts/next-item" claim '<the entry's title>'   # checks the open pull requests, then commits the mark as the first commit
 git push -u origin <branch>
 gh pr create --draft --title '<type>: <the work, in the imperative>' --body '<what and why; the item it claims>'
-next-item claim '<the entry's title>'   # again, now that the pull request is open: settles a tie
+"${CLAUDE_PLUGIN_ROOT}/scripts/next-item" claim '<the entry's title>'   # again, now that the pull request is open: settles a tie
 ```
 
 - **The first `next-item claim` says `already yours`** for a mark already on the default branch: there is no mark

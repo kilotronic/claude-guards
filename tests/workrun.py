@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 WORK = Path(__file__).resolve().parents[1] / "plugins" / "work"
-NEXT_ITEM = WORK / "bin" / "next-item"
+NEXT_ITEM = WORK / "scripts" / "next-item"
 
 README = """\
 # Widgets
