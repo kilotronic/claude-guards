@@ -65,23 +65,33 @@ _INDEX_WRITERS = {
     "merge", "rebase", "revert", "read-tree", "update-index", "reset",
 }  # fmt: skip
 
-# `git config` modes that say outright whether it writes; otherwise a value after the key does.
-_CONFIG_WRITES = {"--unset", "--unset-all"}
+# The `git config` options a plain read may carry; any other option (`--unset-a`, `--remove-section`) is no read.
 _CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l"}
-_CONFIG_VALUE_FLAGS = {
-    "-f",
-    "-t",
-    "--file",
-    "--blob",
-    "--type",
-    "--default",
-    "--comment",
-}
+_CONFIG_READ_FLAGS = {
+    "--global", "--system", "--local", "--worktree", "--show-origin", "--show-scope", "--show-names",
+    "--name-only", "--null", "-z", "--includes", "--no-includes", "--all", "--regexp", "--fixed-value",
+    "--bool", "--int", "--bool-or-int", "--path", "--expiry-date", "--no-type",
+}  # fmt: skip
+_CONFIG_VALUE_FLAGS = {"-f", "-t", "--file", "--blob", "--type", "--default", "--comment", "--value", "--url"}  # fmt: skip
 
 
 def _names_hooks_path(token: str) -> bool:
     """git config keys ignore case: `core.hookspath` is `core.hooksPath`."""
     return "core.hookspath" in token.lower()
+
+
+def _names_hooks_section(args: list[str]) -> bool:
+    """The key, or its whole `core` section (`--remove-section core` drops it unnamed)."""
+    return any(_names_hooks_path(a) or a.lower() == "core" for a in args)
+
+
+def _long_prefix(token: str, options: set[str]) -> bool:
+    """git takes a unique prefix of a long option: `--mess` is `--message`."""
+    return (
+        token.startswith("--")
+        and len(token) > 3
+        and any(o.startswith(token) for o in options)
+    )
 
 
 def _tokens(text: str) -> list[str]:
@@ -172,7 +182,7 @@ class _Git:
                 continue
             if token == "--":
                 break
-            if token in _COMMIT_VALUE_FLAGS:
+            if token in _COMMIT_VALUE_FLAGS or _long_prefix(token, _COMMIT_VALUE_FLAGS):
                 skip = True
                 continue
             if token.startswith("-"):
@@ -186,7 +196,7 @@ class _Git:
         for flag in self._flags():
             if flag in _DRY_RUN:
                 dry = True
-            elif flag.startswith("--no-") and f"--{flag[5:]}" in _DRY_RUN:
+            elif flag.startswith("--no-") and _long_prefix(f"--{flag[5:]}", _DRY_RUN):
                 dry = False
         return dry
 
@@ -199,7 +209,7 @@ class _Git:
                 continue
             if token == "--":
                 return True
-            if token in _COMMIT_VALUE_FLAGS:
+            if token in _COMMIT_VALUE_FLAGS or _long_prefix(token, _COMMIT_VALUE_FLAGS):
                 skip = True
                 continue
             if token in _OUTSIDE_INDEX or (
@@ -219,24 +229,33 @@ class _Git:
         return self.sub in _INDEX_WRITERS
 
     def disarms_hooks(self) -> bool:
-        """`git config` that sets or unsets `core.hooksPath`; reading it disarms nothing."""
-        if self.sub != "config" or not any(_names_hooks_path(a) for a in self.args):
+        """`git config` naming `core.hooksPath` or its section, unless it parses as a plain read."""
+        if self.sub != "config" or not _names_hooks_section(self.args):
             return False
+        args = self.args
+        mode = None
+        if args[:1] in (["get"], ["list"]):
+            mode, args = args[0], args[1:]
         words, skip = [], False
-        for token in self.args:
+        for token in args:
             if skip:
                 skip = False
-            elif token in _CONFIG_WRITES:
-                return True
-            elif token in _CONFIG_READS:
-                return False
+            elif words:
+                words.append(token)  # git stops reading options at the key
+            elif token in _CONFIG_READS and mode is None:
+                mode = token
             elif token in _CONFIG_VALUE_FLAGS:
                 skip = True
-            elif not token.startswith("-"):
+            elif (
+                token in _CONFIG_READ_FLAGS
+                or token.partition("=")[0] in _CONFIG_VALUE_FLAGS
+            ):
+                continue  # `--type=path`: the value is attached
+            elif token.startswith("-"):
+                return True
+            else:
                 words.append(token)
-        if words[:1] in (["get"], ["list"]):
-            return False
-        return len(words) > 1  # `<key> <value>`, `set <key> <value>`, `unset <key>`
+        return mode is None and len(words) != 1
 
     def cwd(self, base: str) -> str:
         for i, token in enumerate(self.globals):
@@ -324,10 +343,10 @@ def refusal(command: str, cwd: str) -> tuple[str, str] | None:
         git = _Git.parse(parsed)
         if git is None:
             continue
+        git = expand_alias(git, git.cwd(here))
         if git.disarms_hooks():
             disarmed = "git config core.hooksPath"
             continue
-        git = expand_alias(git, git.cwd(here))
         if git.sub != "commit":  # only `git commit` runs pre-commit
             index_written = index_written or git.writes_index()
             continue

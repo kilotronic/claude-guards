@@ -270,6 +270,13 @@ def test_refuses_an_index_write_in_the_same_command(repo: Path, command: str) ->
         "git config --default none --get core.hooksPath",
         "git config get core.hooksPath",
         "git config get --all --show-origin core.hooksPath",
+        # After the key, git reads every word as a positional: a read mode before it stays a read.
+        "git config --get core.hooksPath --global",
+        "git config get core.hooksPath --show-origin",
+        "git config --show-scope --worktree --get core.hooksPath",
+        "git config --list",
+        "git config list --show-origin",
+        "git -c alias.cf=config cf core.hooksPath",
     ],
 )
 def test_reading_core_hooks_path_does_not_disarm_the_commit(
@@ -299,6 +306,20 @@ def test_reading_core_hooks_path_does_not_disarm_the_commit(
         "git config core.hookspath /dev/null",
         "git config CORE.HOOKSPATH /dev/null",
         "git config --unset Core.HooksPath",
+        # git takes a unique prefix of a long option.
+        "git config --unset-a core.hooksPath",
+        "git config --repl core.hooksPath /dev/null",
+        # Old-style `git config` stops reading options at the key, so `--get` here is the value.
+        "git config core.hooksPath /dev/null --get",
+        "git config core.hooksPath --get",
+        # Removing or renaming the section drops the key without naming it.
+        "git config --remove-section core",
+        "git config --remove-s CORE",
+        "git config remove-section core",
+        "git config --rename-section core old",
+        # An alias for `config`.
+        "git -c alias.cf=config cf core.hooksPath /dev/null",
+        "git -c alias.hp='config core.hooksPath' hp /dev/null",
     ],
 )
 def test_writing_core_hooks_path_disarms_the_commit(repo: Path, write: str) -> None:
@@ -324,6 +345,22 @@ def test_a_dry_run_commits_nothing_so_skips_nothing(repo: Path, command: str) ->
     (repo / "c.txt").write_text("c\n")
     _git(repo, "add", "c.txt")
     assert run_hook(command, repo) == ALLOW
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # `--no-dry` is git's `--no-dry-run`: the last one wins, so this commits.
+        "git commit --no-verify --dry-run --no-dry -m x",
+        "git commit -n --porcelain --no-porc -m x",
+        # `--mess` is `--message`, so `--dry-run` is the message and this commits.
+        "git commit --no-verify --mess --dry-run",
+    ],
+)
+def test_an_abbreviated_option_can_undo_a_dry_run(repo: Path, command: str) -> None:
+    (repo / "c.txt").write_text("c\n")
+    _git(repo, "add", "c.txt")
+    assert run_hook(command, repo) == BLOCK
 
 
 @pytest.mark.parametrize(
