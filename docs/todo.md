@@ -39,13 +39,6 @@ GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x` an
 
 ## Next
 
-- **Every Bash call starts one Python process per guard, and under load the first to run out its limit
-  times out.** The guards plugin runs 10 hooks on a Bash call and the work plugin 2 more, each its own
-  interpreter, so about a dozen start at once. Measured over one day of transcripts: 38 `PreToolUse:Bash`
-  timeouts at 5 s (nearly all `allow-merge.py`, which alone takes 0.04 to 0.1 s), each delaying the agent's
-  command by the full limit; the limit is now 10 s, which only moves the cliff. Design item, not built.
-  Shape: one dispatcher hook that imports the Bash guards and runs them in one interpreter (one start, the
-  shared parser read once), keeping each guard's rule id, override and "a guard that fails never blocks".
 - **Park's loose ends.** A file the agent already staged still goes into the park commit, past the secret scan;
   `park resume` says "is yours" even when taking the label off fails (no write access); a new folder counts as one
   untracked file. Shape: commit only tracked paths (`git commit -- $(git diff --name-only HEAD)`), check the label

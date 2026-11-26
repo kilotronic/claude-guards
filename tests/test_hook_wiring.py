@@ -91,14 +91,25 @@ BASH_GUARDS = {
 }
 
 
+def _dispatcher() -> str:
+    """The one Bash command line; it runs every guard in bash-guards.py's GUARDS."""
+    commands = _commands("PreToolUse", "Bash")
+    assert list(commands) == ["bash-guards.py"], commands
+    return commands["bash-guards.py"]
+
+
+def _listed() -> set[str]:
+    text = (ROOT / "hooks" / "bash-guards.py").read_text()
+    return set(re.findall(r'"(guard-[a-z-]+\.py)"', text))
+
+
 @pytest.mark.parametrize("script", sorted(BASH_GUARDS))
 def test_every_bash_guard_is_registered_and_blocks_through_its_command_line(
     dirty_main: Path, script: str
 ) -> None:
-    commands = _commands("PreToolUse", "Bash")
-    assert script in commands, f"{script} is not registered for PreToolUse Bash"
+    assert script in _listed(), f"{script} is not in bash-guards.py's GUARDS"
     done = _run(
-        commands[script],
+        _dispatcher(),
         {
             "tool_name": "Bash",
             "tool_input": {"command": BASH_GUARDS[script]},
@@ -109,13 +120,9 @@ def test_every_bash_guard_is_registered_and_blocks_through_its_command_line(
     assert done.stderr.startswith("Refusing"), done.stderr
 
 
-@pytest.mark.parametrize("script", sorted(BASH_GUARDS))
-def test_every_bash_guard_allows_a_harmless_command(
-    dirty_main: Path, script: str
-) -> None:
-    command = _commands("PreToolUse", "Bash")[script]
+def test_every_bash_guard_allows_a_harmless_command(dirty_main: Path) -> None:
     done = _run(
-        command,
+        _dispatcher(),
         {
             "tool_name": "Bash",
             "tool_input": {"command": "git status"},
@@ -172,7 +179,7 @@ def test_every_hook_script_is_registered() -> None:
         for hook in group["hooks"]
     }
     scripts = {p.name for p in (ROOT / "hooks").glob("*.py") if p.name != "guardlib.py"}
-    assert scripts <= registered, scripts - registered
+    assert scripts <= registered | _listed(), scripts - registered - _listed()
 
 
 def test_the_secret_guard_also_runs_on_grep(dirty_main: Path) -> None:

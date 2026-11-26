@@ -121,7 +121,6 @@ def _command_line() -> str:
         for group in hooks["PreToolUse"]
         if group.get("matcher") == "Bash"
         for hook in group["hooks"]
-        if "allow-merge.py" in hook["command"]
     ]
     assert len(found) == 1, found
     return found[0]

@@ -17,48 +17,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-shared-stash.py\"",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-hard-reset.py\"",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-no-verify.py\"",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-commit-on-main.py\"",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-admin-merge.py\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-branch-switch.py\"",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-zsh-special-vars.py\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-ours-theirs.py\"",
-            "timeout": 10
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bash-guards.py\"",
+            "timeout": 30
           }
         ]
       },
       {
-        "matcher": "Bash|Monitor",
+        "matcher": "Monitor",
         "hooks": [
           {
             "type": "command",
@@ -68,7 +33,7 @@
         ]
       },
       {
-        "matcher": "Bash|Read|Grep",
+        "matcher": "Read|Grep",
         "hooks": [
           {
             "type": "command",
