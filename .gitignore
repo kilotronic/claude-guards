@@ -2,3 +2,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
+
+# Secrets: never commit local environment files
+.env
+.env.*
+!.env.example
