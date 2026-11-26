@@ -8,7 +8,7 @@ Two [Claude Code](https://code.claude.com) plugins for agents working in a repos
   writing; the skills that claim an item, build it and land it (`pr` opens the pull request and has a fresh
   agent review it, and `pr-batch` lands several of your own as one); `coordinator`, which makes one session assign the work to
   other agents; `long-loops` and `add-knowledge`; hooks
-  around merging; and a hook that offers to share what Claude saves to memory. See [The work plugin](#the-work-plugin).
+  around merging; a hook that puts `next-item` and `park` on the Bash tool's `PATH`; and a hook that offers to share what Claude saves to memory. See [The work plugin](#the-work-plugin).
 
 The guards were written for several agents working in one repository at once, each in its own git worktree.
 They suit a single agent too. Note that a plain clone is its own main checkout, so the main-checkout guards
@@ -124,14 +124,15 @@ in progress: 0 of 2
 codes: 0 an answer, 1 an error, 2 unclear, 3 no (the item is someone else's, or a branch is not merged). Its old
 name, `goal`, was removed in work 2.0.0: call `next-item`.
 
-**`next-item` and `park` are not on `PATH`** (since work 3.0.0). They live in `plugins/work/scripts/`, because
-claude.ai and Cowork refuse to install a plugin with a top-level `bin/` directory, so the plugin would never reach
-cloud sessions ([Check what each app loads](https://claude.com/docs/plugins/build.md)). The plugin's skills run
-them as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, which Claude Code replaces with the plugin's path when it loads
-a skill; the variable is not set in the Bash tool's environment
-([Environment variables](https://code.claude.com/docs/en/plugins-reference#environment-variables)). A repo's own
-CLAUDE.md or skills should go through the plugin's skills (`/work:orient`, `/work:next`, `/work:start-work`) rather
-than name a bare `next-item`. Outside Claude Code, run `plugins/work/scripts/next-item`.
+**Call `next-item` and `park` by name.** They live in `plugins/work/scripts/`, not a top-level `bin/`, because
+claude.ai and Cowork refuse to install a plugin with one ([Check what each app loads](https://claude.com/docs/plugins/build.md)).
+A SessionStart hook (`scripts-on-path.py`, since work 3.1.0) puts that folder on the Bash tool's `PATH` by appending
+an `export PATH=...` line to `$CLAUDE_ENV_FILE`, which Claude Code runs before each later Bash command
+([Persist environment variables](https://code.claude.com/docs/en/hooks#persist-environment-variables)), locally
+and in cloud sessions. It adds the line once, so a resume or a compaction adds no second entry, and it does
+nothing when the variable is unset. Bash commands only: the line uses `$PATH`, so PowerShell commands get none of
+the session's persisted variables. The plugin's skills run them as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`,
+which works with or without the hook. Outside Claude Code, run `plugins/work/scripts/next-item`.
 
 ### What the repo states
 
@@ -270,6 +271,8 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
 
 ### The hooks
 
+- **`next-item` and `park` run by name** (`scripts-on-path.py`). At every session start, resume, `/clear` and
+  compaction it puts the plugin's `scripts/` on the Bash tool's `PATH`, as [The work plugin](#the-work-plugin) describes.
 - **Agents may merge pull requests in auto mode** (`allow-merge.py`). Claude Code's auto mode refuses
   `gh pr merge` even after the person said yes, so in auto mode this hook allows a Bash call that is only
   `gh pr merge …`: nothing chained to it (`;`, `&&`, `|`), no redirection, substitution, wildcard or newline,
