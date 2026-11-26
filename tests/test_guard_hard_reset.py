@@ -151,3 +151,125 @@ def test_every_hard_reset_in_a_command_is_checked(tmp_path: Path) -> None:
     feature = _repo(tmp_path / "feature", "feature")
     command = f"git -C {feature} reset --hard && git reset --hard"
     assert guard.target_dir(command, str(main)) == str(main)
+
+
+def _dirty(path: Path, branch: str = "feature") -> Path:
+    repo = _repo(path, branch)
+    (repo / "f.txt").write_text("edited\n")
+    return repo
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git commit -am wip && git reset --hard HEAD~1",
+        "git commit -q -a -m wip && git reset -q --hard HEAD~1",
+        "git commit --all --message=wip && git reset --hard HEAD~1",
+        "git add -A && git commit -m wip && git reset --hard HEAD~1",
+        "git add --all && git commit -qm wip && git log --oneline -1 && git reset --hard HEAD~1",
+        "git add . && git commit -m 'a b' && git branch -f tmp HEAD~1 && git reset -q --hard tmp",
+        "git add -u && git commit -m wip &&\n  git reset --hard origin/x",
+        "bash -c 'git commit -am wip && git reset --hard HEAD~1'",
+        "git commit -am \"$(cat <<'EOF'\nwip\nEOF\n)\" && git reset --hard HEAD~1",
+        "cd sub && git commit -am wip >/dev/null 2>&1 && git reset --hard HEAD~1",
+    ],
+)
+def test_a_reset_after_a_commit_that_saves_every_change_passes(
+    tmp_path: Path, command: str
+) -> None:
+    repo = _dirty(tmp_path / "r")
+    (repo / "sub").mkdir()
+    assert _run(command, repo)[0] == 0
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git commit -m wip && git reset --hard HEAD~1",
+        "git add g.txt && git commit -m wip && git reset --hard HEAD~1",
+        "git add -A g.txt && git commit -m wip && git reset --hard HEAD~1",
+        "git add -n . && git commit -m wip && git reset --hard HEAD~1",
+        "git commit -am wip; git reset --hard HEAD~1",
+        "git commit -am wip || git reset --hard HEAD~1",
+        "git commit -am wip & git reset --hard HEAD~1",
+        "git commit -am wip | cat && git reset --hard HEAD~1",
+        "git add -A; git commit -m wip && git reset --hard HEAD~1",
+        "git commit -am wip f.txt && git reset --hard HEAD~1",
+        "git commit -a -m wip -- f.txt && git reset --hard HEAD~1",
+        "git commit -p -m wip && git reset --hard HEAD~1",
+        "git commit --dry-run -am wip && git reset --hard HEAD~1",
+        "git commit -am wip && echo x > f.txt && git reset --hard HEAD~1",
+        "git commit -am wip && git add new.txt && git reset --hard HEAD~1",
+        "(git commit -am wip) && git reset --hard HEAD~1",
+        "bash -c 'git commit -am wip' && git reset --hard HEAD~1",
+        "! git commit -am wip && git reset --hard HEAD~1",
+        "true || git commit -am wip && git reset --hard HEAD~1",
+        "GIT_DIR=/elsewhere git commit -am wip && git reset --hard HEAD~1",
+        "git --work-tree=/elsewhere commit -am wip && git reset --hard HEAD~1",
+        "git commit -am wip && git log --output=f.txt && git reset --hard HEAD~1",
+        'git commit -am wip && git tag "$(echo x > f.txt)" && git reset --hard HEAD~1',
+        "git commit -am wip > f.txt && git reset --hard HEAD~1",
+        "(true) || git commit -am wip && git reset --hard HEAD~1",
+        "{ true; } || git add -A && git commit -m wip && git reset --hard HEAD~1",
+        "if true; then :; fi || git commit -am wip && git reset --hard HEAD~1",
+        "for i in 1; do :; done || git commit -am wip && git reset --hard HEAD~1",
+        "case a in a) true;; esac || git commit -am wip && git reset --hard HEAD~1",
+        "if false; then git commit -am wip; fi && git reset --hard HEAD~1",
+        "bash -c 'git commit -am wip &&'; git reset --hard HEAD~1",
+        "eval 'git commit -am wip &&'; git reset --hard HEAD~1",
+    ],
+)
+def test_a_reset_after_a_commit_that_may_leave_changes_is_refused(
+    tmp_path: Path, command: str
+) -> None:
+    repo = _dirty(tmp_path / "r")
+    (repo / "g.txt").write_text("two\n")
+    subprocess.run(["git", "-C", str(repo), "add", "g.txt"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "two", "--no-verify"],
+        check=True,
+        capture_output=True,
+    )
+    (repo / "g.txt").write_text("edited\n")
+    rc, err = _run(command, repo)
+    assert rc == 2, command
+    assert "uncommitted" in err
+
+
+def test_a_commit_in_another_repo_does_not_save_this_one(tmp_path: Path) -> None:
+    repo = _dirty(tmp_path / "r")
+    other = _dirty(tmp_path / "o")
+    assert (
+        _run(f"git -C {other} commit -am wip && git reset --hard HEAD~1", repo)[0] == 2
+    )
+
+
+@pytest.mark.parametrize(
+    "reset",
+    [
+        "git --git-dir={o}/.git --work-tree={o} reset --hard",
+        "GIT_DIR={o}/.git GIT_WORK_TREE={o} git reset --hard",
+        "git --work-tree={o} reset --hard",
+    ],
+)
+def test_a_commit_here_does_not_save_a_reset_aimed_elsewhere(
+    tmp_path: Path, reset: str
+) -> None:
+    repo = _dirty(tmp_path / "r")
+    other = _dirty(tmp_path / "o")
+    command = "git commit -am wip && " + reset.format(o=other)
+    assert _run(command, repo)[0] == 2
+
+
+def test_git_add_dot_in_a_subdirectory_does_not_save_the_rest(tmp_path: Path) -> None:
+    repo = _dirty(tmp_path / "r")
+    (repo / "sub").mkdir()
+    command = "git add . && git commit -m wip && git reset --hard HEAD~1"
+    assert _run(command, repo / "sub")[0] == 2
+
+
+def test_a_commit_first_does_not_unlock_the_trunk(tmp_path: Path) -> None:
+    repo = _dirty(tmp_path / "r", "main")
+    rc, err = _run("git commit -am wip && git reset --hard HEAD~1", repo)
+    assert rc == 2
+    assert "`main`" in err

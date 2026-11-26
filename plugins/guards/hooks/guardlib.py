@@ -63,6 +63,10 @@ class Command:
     first: int = 0
     # "for"/"select" for a loop header (`words` then holds `NAME in ...`), else None.
     keyword: str | None = None
+    # The operator that ended it: "&&", "||", ";", "|", "&", a newline, a bracket, or "" at the end.
+    ended_by: str = ""
+    # Run under `!`, so its exit status is inverted.
+    negated: bool = False
 
     @property
     def argv(self) -> list[str]:
@@ -180,13 +184,16 @@ class _Parser:
                     command.refs.append(refs)
             word, refs, started = [], [], False
 
-        def end_command(piped: bool = False, subshell: bool = False) -> None:
+        def end_command(
+            ended_by: str = "", piped: bool = False, subshell: bool = False
+        ) -> None:
             """*subshell*: the command ran in a subshell (before a pipe, or sent to the background), so
             its `cd` ends with it. The last part of a pipeline keeps its `cd`, as in zsh (the macOS shell);
             bash without `lastpipe` would drop it."""
             nonlocal command
             end_word()
             command.piped = piped
+            command.ended_by = ended_by
             outer = (self.cwd, self.oldcwd)
             self.finish(command)
             if subshell:
@@ -197,13 +204,13 @@ class _Parser:
             ch = self.peek()
             if stop and ch == stop:
                 self.i += 1
-                end_command()
+                end_command(ch)
                 return
             if ch in " \t":
                 end_word()
                 self.i += 1
             elif ch == "\n":
-                end_command()
+                end_command(ch)
                 self.i += 1
                 self.skip_heredocs()
             elif ch == "#" and not started:
@@ -263,19 +270,19 @@ class _Parser:
                 two = self.text[self.i : self.i + 2]
                 if two in ("&&", "||", ";;", "|&"):
                     self.i += 2
-                    end_command(piped=two == "|&", subshell=two == "|&")
+                    end_command(two, piped=two == "|&", subshell=two == "|&")
                 else:
                     self.i += 1
-                    end_command(piped=ch == "|", subshell=ch in "|&")
+                    end_command(ch, piped=ch == "|", subshell=ch in "|&")
             elif ch == "(":
-                end_command()
+                end_command(ch)
                 self.i += 1
                 # A subshell's `cd` ends with it.
                 outer = (self.cwd, self.oldcwd)
                 self.parse_list(")", substituted=substituted)
                 self.cwd, self.oldcwd = outer
             elif ch == ")":
-                end_command()
+                end_command(ch)
                 self.i += 1
             else:
                 word.append(ch)
@@ -347,6 +354,7 @@ class _Parser:
     @staticmethod
     def strip_reserved(command: Command) -> None:
         while command.words and command.words[0] in RESERVED:
+            command.negated = command.negated or command.words[0] == "!"
             command.words.pop(0)
             command.refs.pop(0)
         # Assignments after a reserved word (`do x=1`) were read as words.
@@ -428,6 +436,9 @@ class _Parser:
         if not (
             command.words or command.assignments or command.redirects or command.keyword
         ):
+            # A closing `)`, `}` or `fi`: an `||` or a pipe after it applies to the command before.
+            if command.ended_by in ("||", "|", "|&") and self.out:
+                self.out[-1].ended_by = command.ended_by
             return
         self.out.append(command)
         argv = command.argv
@@ -446,7 +457,10 @@ class _Parser:
             self.oldcwd = before
         script = _inner_script(argv)
         if script is not None:
-            for inner in parse(script, cwd=self.cwd):
+            inners = parse(script, cwd=self.cwd)
+            if inners:
+                inners[-1].ended_by = ""  # the script ends there, whatever trails it
+            for inner in inners:
                 inner.substituted = inner.substituted or command.substituted
                 inner.piped = inner.piped or command.piped
                 inner.redirects = inner.redirects + command.redirects
