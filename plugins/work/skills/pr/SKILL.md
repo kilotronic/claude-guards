@@ -6,8 +6,8 @@ description:
   arm auto-merge and confirm it landed. Use for "open a PR", "ship this branch", "merge it".
 ---
 
-`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
-not on `PATH`.
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, which works
+whether or not the plugin's SessionStart hook put it on `PATH`.
 
 Open a pull request for the current branch, or with `merge`, merge it.
 

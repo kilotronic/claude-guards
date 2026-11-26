@@ -10,8 +10,8 @@ allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh repo view*), Bash(*/scripts/n
 
 # Prune merged branches and worktrees
 
-`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
-not on `PATH`.
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, which works
+whether or not the plugin's SessionStart hook put it on `PATH`.
 
 Delete remote branches, and local worktrees and branches, whose commits are **already on
 the default branch**, using patch-equivalence rather than ancestry. With rebase or squash

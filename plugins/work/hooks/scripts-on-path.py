@@ -15,8 +15,8 @@ import os
 from pathlib import Path
 
 
-def export_line(scripts: Path) -> str:
-    quoted = "".join("\\" + c if c in '"$`\\' else c for c in str(scripts))
+def export_line(scripts: str) -> str:
+    quoted = "".join("\\" + c if c in '"$`\\' else c for c in scripts)
     return f'export PATH="{quoted}:$PATH"'
 
 
@@ -24,13 +24,17 @@ def main() -> None:
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if not env_file:
         return
-    line = export_line(Path(__file__).resolve().parent.parent / "scripts")
+    scripts = str(Path(__file__).resolve().parent.parent / "scripts")
+    # A colon would split PATH and a newline the line; no quoting helps either.
+    if ":" in scripts or "\n" in scripts:
+        return
+    line = os.fsencode(export_line(scripts))
     path = Path(env_file)
-    text = path.read_text() if path.exists() else ""
+    text = path.read_bytes() if path.exists() else b""
     if line in text.splitlines():
         return
-    with path.open("a") as out:
-        out.write(("\n" if text and not text.endswith("\n") else "") + line + "\n")
+    with path.open("ab") as out:
+        out.write((b"\n" if text and not text.endswith(b"\n") else b"") + line + b"\n")
 
 
 if __name__ == "__main__":

@@ -12,8 +12,8 @@ allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh run *), Bash(gh repo view*), 
 
 # Batch pull requests into one
 
-`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
-not on `PATH`.
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, which works
+whether or not the plugin's SessionStart hook put it on `PATH`.
 
 Each pull request runs the repo's checks, again on every push, and often a deploy when it merges. Ten pull
 requests landing one by one means at least ten check runs; one combined pull request means one. Batch when the

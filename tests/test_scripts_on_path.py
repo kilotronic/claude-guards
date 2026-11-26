@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -106,3 +107,50 @@ def test_only_the_commands_become_bare_names() -> None:
         and p.stat().st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     )
     assert runnable == ["next-item", "park", "park.py"]
+
+
+def _copy_plugin(dest: Path) -> Path:
+    shutil.copytree(WORK, dest, ignore=shutil.ignore_patterns("__pycache__"))
+    return dest
+
+
+def _run_copy(copy: Path, env_file: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [str(copy / "hooks" / "scripts-on-path.py")],
+        input="{}",
+        capture_output=True,
+        text=True,
+        env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)},
+        check=False,
+    )
+
+
+def test_a_path_with_shell_characters_still_resolves(tmp_path: Path) -> None:
+    copy = _copy_plugin(tmp_path / 'a $b"c`d\\e' / "work")
+    env_file = tmp_path / "env.sh"
+    assert _run_copy(copy, env_file).returncode == 0
+    found = subprocess.run(
+        ["bash", "-c", '. "$1" && command -v next-item', "_", str(env_file)],
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin"},
+        check=True,
+    )
+    assert found.stdout.strip() == str(copy / "scripts" / "next-item")
+
+
+def test_a_path_that_cannot_go_on_path_is_left_out(tmp_path: Path) -> None:
+    for i, name in enumerate(("a:b", "a\nb")):
+        copy = _copy_plugin(tmp_path / str(i) / name / "work")
+        env_file = tmp_path / f"env{i}.sh"
+        done = _run_copy(copy, env_file)
+        assert done.returncode == 0, done.stderr
+        assert not env_file.exists(), name
+
+
+def test_other_bytes_in_the_env_file_are_kept(tmp_path: Path) -> None:
+    env_file = tmp_path / "env.sh"
+    env_file.write_bytes(b"export X='\xff'\n")
+    done = _run({"CLAUDE_ENV_FILE": str(env_file), "LC_ALL": "C", "PYTHONUTF8": "0"})
+    assert done.returncode == 0, done.stderr
+    assert env_file.read_bytes() == b"export X='\xff'\n" + LINE.encode() + b"\n"

@@ -128,10 +128,10 @@ name, `goal`, was removed in work 2.0.0: call `next-item`.
 claude.ai and Cowork refuse to install a plugin with one ([Check what each app loads](https://claude.com/docs/plugins/build.md)).
 A SessionStart hook (`scripts-on-path.py`, since work 3.1.0) puts that folder on the Bash tool's `PATH` by appending
 an `export PATH=...` line to `$CLAUDE_ENV_FILE`, which Claude Code runs before each later Bash command
-([Persist environment variables](https://code.claude.com/docs/en/hooks#persist-environment-variables)), locally
-and in cloud sessions. It adds the line once, so a resume or a compaction adds no second entry, and it does
-nothing when the variable is unset. Bash commands only: the line uses `$PATH`, so PowerShell commands get none of
-the session's persisted variables. The plugin's skills run them as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`,
+([Persist environment variables](https://code.claude.com/docs/en/hooks#persist-environment-variables)). It adds the line once, so a resume or a compaction adds no second entry, and it does
+nothing when the variable is unset. The folder goes first, so these two names win over any other `next-item` or
+`park` on `PATH`. Bash commands only: because the line reads `$PATH`, Claude Code then passes PowerShell commands none
+of the variables any hook persisted in that session, not only this one. The plugin's skills run them as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`,
 which works with or without the hook. Outside Claude Code, run `plugins/work/scripts/next-item`.
 
 ### What the repo states

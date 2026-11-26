@@ -11,7 +11,7 @@ description:
 # Coordinate: assign, unblock, pace
 
 `next-item` and `park` are this plugin's commands: run them as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"` and
-`"${CLAUDE_PLUGIN_ROOT}/scripts/park"`, not bare, since they are not on `PATH`.
+`"${CLAUDE_PLUGIN_ROOT}/scripts/park"`, which work whether or not the plugin's SessionStart hook put them on `PATH`.
 
 One session holds this role per repo. It is a dispatcher. It never writes the work, judges a diff, decides a
 design question or reviews a change itself: each worker claims, builds, reviews and lands its own item through the
