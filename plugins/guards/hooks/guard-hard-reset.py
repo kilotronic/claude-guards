@@ -107,6 +107,15 @@ def _quiet(command: guardlib.Command) -> bool:
     )
 
 
+def _plain(command: guardlib.Command) -> bool:
+    """Whether *command* acts on the worktree its directory names: no wrapper, `GIT_DIR=` or `--work-tree`."""
+    return (
+        not command.assignments
+        and command.words == command.argv
+        and not any(w.startswith(("--git-dir", "--work-tree")) for w in command.argv)
+    )
+
+
 def _same(a: str | None, b: str) -> bool:
     return a is not None and os.path.realpath(a) == os.path.realpath(b)
 
@@ -123,6 +132,8 @@ def saved_first(commands: list[guardlib.Command], r: int, place: str) -> bool:
     """Whether a commit earlier on the line, joined to the reset at *r* by `&&` alone, takes in every
     uncommitted change in *place*: `git commit -a`, or a commit after `git add -A`/`-u`/`.` (at the top).
     Anything it cannot tell is safe makes it False."""
+    if not _plain(commands[r]):
+        return False
     committed = False
     for k in range(r - 1, -1, -1):
         command = commands[k]
@@ -138,10 +149,7 @@ def saved_first(commands: list[guardlib.Command], r: int, place: str) -> bool:
             return False
         sub, args, dirs = git
         here = guardlib.where(command, dirs)
-        plain = not command.assignments and command.words == command.argv
-        plain = plain and not any(
-            w.startswith(("--git-dir", "--work-tree")) for w in command.argv
-        )
+        plain = _plain(command)
         if sub == "commit":
             every = _commit_all(args)
             if every is None or not plain or not _same(here, place):

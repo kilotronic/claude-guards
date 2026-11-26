@@ -436,6 +436,9 @@ class _Parser:
         if not (
             command.words or command.assignments or command.redirects or command.keyword
         ):
+            # A closing `)`, `}` or `fi`: an `||` or a pipe after it applies to the command before.
+            if command.ended_by in ("||", "|", "|&") and self.out:
+                self.out[-1].ended_by = command.ended_by
             return
         self.out.append(command)
         argv = command.argv
@@ -454,7 +457,10 @@ class _Parser:
             self.oldcwd = before
         script = _inner_script(argv)
         if script is not None:
-            for inner in parse(script, cwd=self.cwd):
+            inners = parse(script, cwd=self.cwd)
+            if inners:
+                inners[-1].ended_by = ""  # the script ends there, whatever trails it
+            for inner in inners:
                 inner.substituted = inner.substituted or command.substituted
                 inner.piped = inner.piped or command.piped
                 inner.redirects = inner.redirects + command.redirects

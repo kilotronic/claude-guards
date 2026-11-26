@@ -209,6 +209,14 @@ def test_a_reset_after_a_commit_that_saves_every_change_passes(
         "git commit -am wip && git log --output=f.txt && git reset --hard HEAD~1",
         'git commit -am wip && git tag "$(echo x > f.txt)" && git reset --hard HEAD~1',
         "git commit -am wip > f.txt && git reset --hard HEAD~1",
+        "(true) || git commit -am wip && git reset --hard HEAD~1",
+        "{ true; } || git add -A && git commit -m wip && git reset --hard HEAD~1",
+        "if true; then :; fi || git commit -am wip && git reset --hard HEAD~1",
+        "for i in 1; do :; done || git commit -am wip && git reset --hard HEAD~1",
+        "case a in a) true;; esac || git commit -am wip && git reset --hard HEAD~1",
+        "if false; then git commit -am wip; fi && git reset --hard HEAD~1",
+        "bash -c 'git commit -am wip &&'; git reset --hard HEAD~1",
+        "eval 'git commit -am wip &&'; git reset --hard HEAD~1",
     ],
 )
 def test_a_reset_after_a_commit_that_may_leave_changes_is_refused(
@@ -234,6 +242,23 @@ def test_a_commit_in_another_repo_does_not_save_this_one(tmp_path: Path) -> None
     assert (
         _run(f"git -C {other} commit -am wip && git reset --hard HEAD~1", repo)[0] == 2
     )
+
+
+@pytest.mark.parametrize(
+    "reset",
+    [
+        "git --git-dir={o}/.git --work-tree={o} reset --hard",
+        "GIT_DIR={o}/.git GIT_WORK_TREE={o} git reset --hard",
+        "git --work-tree={o} reset --hard",
+    ],
+)
+def test_a_commit_here_does_not_save_a_reset_aimed_elsewhere(
+    tmp_path: Path, reset: str
+) -> None:
+    repo = _dirty(tmp_path / "r")
+    other = _dirty(tmp_path / "o")
+    command = "git commit -am wip && " + reset.format(o=other)
+    assert _run(command, repo)[0] == 2
 
 
 def test_git_add_dot_in_a_subdirectory_does_not_save_the_rest(tmp_path: Path) -> None:
