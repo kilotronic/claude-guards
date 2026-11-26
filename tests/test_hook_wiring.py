@@ -186,3 +186,20 @@ def test_the_secret_guard_also_runs_on_grep(dirty_main: Path) -> None:
         },
     }
     assert _run(command, payload).returncode == 2
+
+
+PLUGINS = Path(__file__).resolve().parents[1] / "plugins"
+
+
+def test_no_hook_times_out_under_ten_seconds() -> None:
+    # Under load a dozen interpreters start on one tool call; 5 s timed out
+    # allow-merge.py and block-main-edits.py, and each timeout stalls the agent.
+    short = [
+        f"{path.parent.parent.name}: {hook['command']} ({hook['timeout']} s)"
+        for path in sorted(PLUGINS.glob("*/hooks/hooks.json"))
+        for groups in json.loads(path.read_text())["hooks"].values()
+        for group in groups
+        for hook in group["hooks"]
+        if hook["timeout"] < 10
+    ]
+    assert not short, short
