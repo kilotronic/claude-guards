@@ -121,8 +121,17 @@ in progress: 0 of 2
 ```
 
 `next-item --list` adds every free item in order and every claim, and `--json` gives the same for scripts. Exit
-codes: 0 an answer, 1 an error, 2 unclear, 3 no (the item is someone else's, or a branch is not merged). The
-plugin puts `next-item` on the Bash tool's `PATH`; outside Claude Code, run `plugins/work/bin/next-item`. Its old name, `goal`, was removed in work 2.0.0: call `next-item`.
+codes: 0 an answer, 1 an error, 2 unclear, 3 no (the item is someone else's, or a branch is not merged). Its old
+name, `goal`, was removed in work 2.0.0: call `next-item`.
+
+**`next-item` and `park` are not on `PATH`** (since work 3.0.0). They live in `plugins/work/scripts/`, because
+claude.ai and Cowork refuse to install a plugin with a top-level `bin/` directory, so the plugin would never reach
+cloud sessions ([Check what each app loads](https://claude.com/docs/plugins/build.md)). The plugin's skills run
+them as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, which Claude Code replaces with the plugin's path when it loads
+a skill; the variable is not set in the Bash tool's environment
+([Environment variables](https://code.claude.com/docs/en/plugins-reference#environment-variables)). A repo's own
+CLAUDE.md or skills should go through the plugin's skills (`/work:orient`, `/work:next`, `/work:start-work`) rather
+than name a bare `next-item`. Outside Claude Code, run `plugins/work/scripts/next-item`.
 
 ### What the repo states
 

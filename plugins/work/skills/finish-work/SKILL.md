@@ -9,6 +9,9 @@ description:
 
 # Finish an item
 
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
+not on `PATH`.
+
 When `next-item` answers `record: issues`, the repo keeps its work in GitHub issues: skip the todo-file steps here
 and follow [start-work's "Work kept in GitHub issues"](../start-work/SKILL.md#work-kept-in-github-issues) for
 the issue; the gates, the merge and the clean-up below are the same.
@@ -39,7 +42,7 @@ Wait with one `gh pr checks <n> --watch --interval 60`, then confirm:
 
 ```bash
 gh pr view <n> --json state -q .state    # must print MERGED
-next-item merged <branch>                # exit 0: the branch's work is on main
+"${CLAUDE_PLUGIN_ROOT}/scripts/next-item" merged <branch>   # exit 0: the branch's work is on main
 ```
 
 A pull request the `pr-batch` skill closed and batched is done when the batch merged: its comment
@@ -69,8 +72,8 @@ gh pr close <n>
 If the work goes on under another item instead, move the claim on the branch, and push:
 
 ```bash
-next-item release '<the old title>'    # commits the mark away
-next-item claim '<the new title>'      # commits the new mark
+"${CLAUDE_PLUGIN_ROOT}/scripts/next-item" release '<the old title>'   # commits the mark away
+"${CLAUDE_PLUGIN_ROOT}/scripts/next-item" claim '<the new title>'   # commits the new mark
 ```
 
 An item held by a mark on the default branch, made before claims moved to pull requests, is freed only by a

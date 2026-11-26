@@ -5,10 +5,13 @@ description:
   into the default branch. Rebase-safe (patch-equivalence via git cherry, not ahead
   counts). Dry run by default; "--apply" deletes. Use for "prune merged branches", "clean
   up stale worktrees".
-allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh repo view*), Bash(next-item merged *), Bash(xargs *)
+allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh repo view*), Bash(*/scripts/next-item" merged *), Bash(xargs *)
 ---
 
 # Prune merged branches and worktrees
+
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
+not on `PATH`.
 
 Delete remote branches, and local worktrees and branches, whose commits are **already on
 the default branch**, using patch-equivalence rather than ancestry. With rebase or squash
@@ -65,7 +68,7 @@ For each `origin/<branch>` that is not protected, run the shared merged-branch t
 uses too):
 
 ```bash
-next-item merged --no-fetch <branch>   # step 1 already fetched
+"${CLAUDE_PLUGIN_ROOT}/scripts/next-item" merged --no-fetch <branch>   # step 1 already fetched
 ```
 
 - Exit `0` → **fully merged**, safe to delete. Either every commit is on `$base` as the same patch

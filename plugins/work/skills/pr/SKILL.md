@@ -1,10 +1,13 @@
 ---
 name: pr
-allowed-tools: Bash(git fetch *), Bash(git rebase origin/*), Bash(git status*), Bash(git log *), Bash(git rev-parse *), Bash(git push --force-with-lease origin HEAD), Bash(gh pr view *), Bash(gh pr create *), Bash(gh pr ready *), Bash(gh pr edit *), Bash(gh pr comment *), Bash(gh pr checks *), Bash(gh issue list *), Bash(gh run view *), Bash(gh run list *), Bash(gh run watch *), Bash(next-item merged *), Agent, Skill(code-review)
+allowed-tools: Bash(git fetch *), Bash(git rebase origin/*), Bash(git status*), Bash(git log *), Bash(git rev-parse *), Bash(git push --force-with-lease origin HEAD), Bash(gh pr view *), Bash(gh pr create *), Bash(gh pr ready *), Bash(gh pr edit *), Bash(gh pr comment *), Bash(gh pr checks *), Bash(gh issue list *), Bash(gh run view *), Bash(gh run list *), Bash(gh run watch *), Bash(*/scripts/next-item" merged *), Agent, Skill(code-review)
 description:
   Open a pull request for the current branch (rebase, docs, checks, a fresh reviewer agent), or with "merge"
   arm auto-merge and confirm it landed. Use for "open a PR", "ship this branch", "merge it".
 ---
+
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
+not on `PATH`.
 
 Open a pull request for the current branch, or with `merge`, merge it.
 

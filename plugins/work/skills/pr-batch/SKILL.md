@@ -7,10 +7,13 @@ description:
   merge method, then noting on each original where it landed. Batches only pull requests you opened unless
   your person names another. One repair attempt on failure, then it reopens the originals and says so. Use
   for "batch the PR backlog", "clear the PRs", "combine these pull requests".
-allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh run *), Bash(gh repo view*), Bash(gh api *), Bash(gh issue *), Bash(next-item *), Agent, Skill(code-review)
+allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh run *), Bash(gh repo view*), Bash(gh api *), Bash(gh issue *), Bash(*/scripts/next-item" *), Agent, Skill(code-review)
 ---
 
 # Batch pull requests into one
+
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
+not on `PATH`.
 
 Each pull request runs the repo's checks, again on every push, and often a deploy when it merges. Ten pull
 requests landing one by one means at least ten check runs; one combined pull request means one. Batch when the

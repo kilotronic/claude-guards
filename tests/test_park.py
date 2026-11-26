@@ -146,7 +146,8 @@ def test_notice_lists_parked_pull_requests():
     call = run.ran("gh", "pr", "list")[0]
     assert "--label" in call and "parked" in call
     assert "#7 Fix the thing (fix/thing)" in text and "#9" in text
-    assert "park resume <n>" in text
+    # The session runs what it reads, and park is not on PATH: name it by its path.
+    assert f'`"{SCRIPT.parent / "park"}" resume <n>`' in text
 
 
 def test_notice_is_silent_with_none_or_when_github_fails():
@@ -207,7 +208,7 @@ def test_the_hooks_are_wired():
     assert stop["hooks"][0]["command"].endswith('park.py" hook')
     starts = [h["command"] for g in hooks["SessionStart"] for h in g["hooks"]]
     assert any(c.endswith('park.py" notice') for c in starts)
-    assert (WORK / "bin" / "park").is_file()
+    assert (WORK / "scripts" / "park").is_file()
 
 
 def test_the_hook_never_fails_on_bad_input(tmp_path):

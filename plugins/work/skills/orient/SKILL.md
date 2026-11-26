@@ -8,6 +8,9 @@ description:
 
 # Orient: what should we do next?
 
+`next-item` is this plugin's command: run it as `"${CLAUDE_PLUGIN_ROOT}/scripts/next-item"`, not bare, since it is
+not on `PATH`.
+
 Answer the session-start question in one pass, and end with one concrete recommendation, not a survey.
 The order of work is `next-item`'s, not this skill's: `next-item` reads the repo's README section
 `## How work runs here` and its todo file in the working copy (claims from the open pull requests whose
@@ -20,7 +23,7 @@ branches carry a claim mark), and answers.
 2. **The answer and the list.**
 
    ```bash
-   next-item --list
+   "${CLAUDE_PLUGIN_ROOT}/scripts/next-item" --list
    ```
 
    It prints the milestone, the next item with its reason, the in-progress count against the limit, any stale

@@ -127,7 +127,8 @@ def notice(cwd: str, run) -> str:
         return ""
     if not prs:
         return ""
-    lines = ["Parked work (take one with `park resume <n>`):"]
+    park_cmd = os.path.join(os.path.dirname(os.path.realpath(__file__)), "park")
+    lines = [f'Parked work (take one with `"{park_cmd}" resume <n>`):']
     lines += [f"  #{p['number']} {p['title']} ({p['headRefName']})" for p in prs]
     return "\n".join(lines)
 
