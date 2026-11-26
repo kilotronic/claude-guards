@@ -170,12 +170,16 @@ def _dirty(path: Path, branch: str = "feature") -> Path:
         "git add . && git commit -m 'a b' && git branch -f tmp HEAD~1 && git reset -q --hard tmp",
         "git add -u && git commit -m wip &&\n  git reset --hard origin/x",
         "bash -c 'git commit -am wip && git reset --hard HEAD~1'",
+        "git commit -am \"$(cat <<'EOF'\nwip\nEOF\n)\" && git reset --hard HEAD~1",
+        "cd sub && git commit -am wip >/dev/null 2>&1 && git reset --hard HEAD~1",
     ],
 )
 def test_a_reset_after_a_commit_that_saves_every_change_passes(
     tmp_path: Path, command: str
 ) -> None:
-    assert _run(command, _dirty(tmp_path / "r"))[0] == 0
+    repo = _dirty(tmp_path / "r")
+    (repo / "sub").mkdir()
+    assert _run(command, repo)[0] == 0
 
 
 @pytest.mark.parametrize(
@@ -198,6 +202,13 @@ def test_a_reset_after_a_commit_that_saves_every_change_passes(
         "git commit -am wip && git add new.txt && git reset --hard HEAD~1",
         "(git commit -am wip) && git reset --hard HEAD~1",
         "bash -c 'git commit -am wip' && git reset --hard HEAD~1",
+        "! git commit -am wip && git reset --hard HEAD~1",
+        "true || git commit -am wip && git reset --hard HEAD~1",
+        "GIT_DIR=/elsewhere git commit -am wip && git reset --hard HEAD~1",
+        "git --work-tree=/elsewhere commit -am wip && git reset --hard HEAD~1",
+        "git commit -am wip && git log --output=f.txt && git reset --hard HEAD~1",
+        'git commit -am wip && git tag "$(echo x > f.txt)" && git reset --hard HEAD~1',
+        "git commit -am wip > f.txt && git reset --hard HEAD~1",
     ],
 )
 def test_a_reset_after_a_commit_that_may_leave_changes_is_refused(
