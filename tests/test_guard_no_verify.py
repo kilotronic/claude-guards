@@ -254,6 +254,7 @@ def test_refuses_an_index_write_in_the_same_command(repo: Path, command: str) ->
         "git config --global core.hooksPath",
         "git config --type=path core.hooksPath",
         "git config --type path core.hooksPath",
+        "git config -t path core.hooksPath",
         "git config -f .git/config core.hooksPath",
         "git config --blob HEAD:cfg core.hooksPath",
         "git config --default none core.hooksPath",
@@ -313,11 +314,13 @@ def test_writing_core_hooks_path_disarms_the_commit(repo: Path, write: str) -> N
         "git commit -n --short",
         "SKIP=ruff git commit --porcelain -m x",
         "git -c core.hooksPath=/dev/null commit --long",
+        "git commit -n -z",
+        "git commit --no-verify --null -m x",
         "git config core.hooksPath /dev/null; git commit --dry-run -m x",
     ],
 )
 def test_a_dry_run_commits_nothing_so_skips_nothing(repo: Path, command: str) -> None:
-    """`--short`, `--porcelain` and `--long` imply `--dry-run`."""
+    """`--short`, `--porcelain`, `--long` and `-z` imply `--dry-run`."""
     (repo / "c.txt").write_text("c\n")
     _git(repo, "add", "c.txt")
     assert run_hook(command, repo) == ALLOW

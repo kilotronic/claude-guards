@@ -49,8 +49,8 @@ _OUTSIDE_INDEX = {
     "--patch",
     "--interactive",
 }
-# `--short`, `--porcelain` and `--long` imply `--dry-run`.
-_DRY_RUN = {"--dry-run", "--short", "--porcelain", "--long"}
+# `--short`, `--porcelain`, `--long` and `-z` imply `--dry-run`.
+_DRY_RUN = {"--dry-run", "--short", "--porcelain", "--long", "-z", "--null"}
 _SHORT_FLAGS = re.compile(r"^-[a-zA-Z]+$")
 # Short options of `git commit` that take a value, attached or as the next word: in `-mfinal` the `m` takes
 # `final`, so its `n` is not `-n`.
@@ -70,6 +70,7 @@ _CONFIG_WRITES = {"--unset", "--unset-all"}
 _CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l"}
 _CONFIG_VALUE_FLAGS = {
     "-f",
+    "-t",
     "--file",
     "--blob",
     "--type",
