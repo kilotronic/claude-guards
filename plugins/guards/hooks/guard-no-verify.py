@@ -66,7 +66,7 @@ _INDEX_WRITERS = {
 }  # fmt: skip
 
 # `git config` modes that say outright whether it writes; otherwise a value after the key does.
-_CONFIG_WRITES = {"--unset", "--unset-all", "--replace-all", "--add"}
+_CONFIG_WRITES = {"--unset", "--unset-all"}
 _CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l"}
 _CONFIG_VALUE_FLAGS = {
     "-f",
@@ -75,7 +75,6 @@ _CONFIG_VALUE_FLAGS = {
     "--type",
     "--default",
     "--comment",
-    "--value",
 }
 
 
@@ -182,7 +181,13 @@ class _Git:
 
     def dry_run(self) -> bool:
         """Commits nothing and runs no hooks, so there is nothing to bypass."""
-        return bool(_DRY_RUN & set(self._flags()))
+        dry = False  # the last of `--dry-run` and `--no-dry-run` wins, as in git
+        for flag in self._flags():
+            if flag in _DRY_RUN:
+                dry = True
+            elif flag.startswith("--no-") and f"--{flag[5:]}" in _DRY_RUN:
+                dry = False
+        return dry
 
     def commits_outside_the_index(self) -> bool:
         """`-a`, `--include`, `--only` or a pathspec: content the index tree cannot vouch for."""
@@ -228,11 +233,9 @@ class _Git:
                 skip = True
             elif not token.startswith("-"):
                 words.append(token)
-        if words[:1] in (["set"], ["unset"]):
-            return True
         if words[:1] in (["get"], ["list"]):
             return False
-        return len(words) > 1  # `git config <key> <value>`; the key alone is a read
+        return len(words) > 1  # `<key> <value>`, `set <key> <value>`, `unset <key>`
 
     def cwd(self, base: str) -> str:
         for i, token in enumerate(self.globals):

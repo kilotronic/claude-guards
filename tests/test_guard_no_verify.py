@@ -253,6 +253,18 @@ def test_refuses_an_index_write_in_the_same_command(repo: Path, command: str) ->
         "git config --show-origin --get core.hooksPath",
         "git config --global core.hooksPath",
         "git config --type=path core.hooksPath",
+        "git config --type path core.hooksPath",
+        "git config -f .git/config core.hooksPath",
+        "git config --blob HEAD:cfg core.hooksPath",
+        "git config --default none core.hooksPath",
+        "git config --comment note core.hooksPath",
+        # A value pattern after the key: only the mode says it is a read.
+        "git config --get core.hooksPath /dev/null",
+        "git config --get-all core.hooksPath /dev/null",
+        "git config --get-regexp core.hooksPath /dev/null",
+        "git config --get-urlmatch core.hooksPath https://example.invalid",
+        "git config -l core.hooksPath x",
+        "git config --list core.hooksPath x",
         "git config --file .git/config core.hooksPath",
         "git config --default none --get core.hooksPath",
         "git config get core.hooksPath",
@@ -309,6 +321,20 @@ def test_a_dry_run_commits_nothing_so_skips_nothing(repo: Path, command: str) ->
     (repo / "c.txt").write_text("c\n")
     _git(repo, "add", "c.txt")
     assert run_hook(command, repo) == ALLOW
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git commit --no-verify --dry-run --no-dry-run -m x",
+        "git commit --no-verify --short --no-short -m x",
+        "git commit --no-verify -m --dry-run",
+    ],
+)
+def test_a_cancelled_or_quoted_dry_run_still_commits(repo: Path, command: str) -> None:
+    (repo / "c.txt").write_text("c\n")
+    _git(repo, "add", "c.txt")
+    assert run_hook(command, repo) == BLOCK
 
 
 def test_a_dry_run_after_the_pathspec_separator_is_a_path(repo: Path) -> None:
