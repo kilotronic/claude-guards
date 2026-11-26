@@ -160,6 +160,15 @@ def test_names_every_bypass_spelling(command: str, kind: str) -> None:
         "SKIP=pyright git status",
         "git -c core.hooksPath=/dev/null log -5",
         "cat > doc.md <<'EOF'\ngit commit --amend --no-edit --no-verify\nEOF",
+        # A process substitution is its own command: its `-n` is sed's.
+        "git commit -q -F <(sed -n '1,$p' <<'EOF'\nchore: x\nEOF\n)",
+        "git commit -F <(printf '%s' msg | head -n 5)",
+        "git commit -m x 2> >(tee -a log -n)",
+        # A message that is exactly a bypass spelling is still the message.
+        "git commit -m --no-verify",
+        "git commit -m -n",
+        # `-mfinal`'s `n` is a letter of the message, not `-n`.
+        "git commit -mfinal",
     ],
 )
 def test_ignores_commits_that_run_the_hooks_and_mere_mentions(command: str) -> None:
@@ -176,6 +185,19 @@ def test_allows_a_reword_with_nothing_staged(repo: Path) -> None:
 def test_allows_the_sanctioned_squash_recipe(repo: Path) -> None:
     _git(repo, "reset", "--soft", "origin/main")
     assert run_hook('git commit --no-verify -m "squashed"', repo) == ALLOW
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'git reset --soft origin/main && git commit --no-verify -qm "squashed"',
+        "git reset --soft origin/main && git commit --no-verify -mfinal",
+    ],
+)
+def test_a_short_flag_group_message_is_not_a_pathspec(repo: Path, command: str) -> None:
+    """`-qm x` takes `x` as its message, and `-mfinal`'s `a` is a letter of
+    the message, not `-a`, as git reads them."""
+    assert run_hook(command, repo) == ALLOW
 
 
 def test_allows_the_squash_recipe_on_one_line(repo: Path) -> None:
@@ -211,11 +233,25 @@ def test_refuses_an_amend_that_folds_in_staged_fixups(repo: Path) -> None:
         "eval 'git add c.txt && git commit --no-verify -m y'",
         "export SKIP=ruff; git add c.txt; git commit -m x",
         "git config core.hooksPath /dev/null && git add c.txt && git commit -m x",
+        "git add c.txt && git commit -n -F <(sed -n '1,$p' msg.txt)",
     ],
 )
 def test_refuses_an_index_write_in_the_same_command(repo: Path, command: str) -> None:
     (repo / "c.txt").write_text("c\n")
     assert run_hook(command, repo) == BLOCK
+
+
+def test_a_commit_message_from_a_process_substitution_runs_the_hooks(
+    repo: Path,
+) -> None:
+    """Refused in a session as "`-n` after an index write": sed's `-n` inside
+    `<(...)` was read as the commit's own flag."""
+    (repo / "c.txt").write_text("c\n")
+    command = (
+        "git add -A && git commit -q -F <(sed -n '1,$p' <<'EOF'\n"
+        "chore: x\n\nBody with -n and --no-verify.\nEOF\n)"
+    )
+    assert run_hook(command, repo) == ALLOW
 
 
 @pytest.mark.parametrize(
@@ -280,6 +316,13 @@ def test_a_commit_alias_is_judged_as_the_commit_it_expands_to(
 def test_an_index_writer_alias_in_the_same_command_counts(aliased: Path) -> None:
     (aliased / "c.txt").write_text("c\n")
     assert run_hook("git a c.txt && git commit --no-verify -m x", aliased) == BLOCK
+
+
+def test_the_last_inline_alias_wins_as_in_git(repo: Path) -> None:
+    (repo / "c.txt").write_text("c\n")
+    _git(repo, "add", "c.txt")
+    command = "git -c alias.k=status -c alias.k=commit k --no-verify -m x"
+    assert run_hook(command, repo) == BLOCK
 
 
 def test_an_aliased_reword_with_nothing_staged_is_still_allowed(aliased: Path) -> None:
