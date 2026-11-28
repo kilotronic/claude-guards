@@ -68,6 +68,11 @@ gh pr create --draft --title '<type>: <the work, in the imperative>' --body '<wh
 
 - **The first `next-item claim` says `already yours`** for a mark already on the default branch: there is no mark
   commit to push, so make the work's first commit before opening the pull request.
+- **`gh pr create` is refused without the claim.** This plugin's hook (`claim-before-pr`) asks
+  `next-item claimed`: a branch that changes code opens a pull request only when it carries the mark the first
+  `next-item claim` committed, or a mark on the default branch is yours. Docs-only branches open freely. Work the
+  owner asked for directly, with no todo entry to claim, says so on a line of its own in the pull request's
+  body: `No backlog item: the owner asked for this directly.` Never add that line to skip a claim an entry exists for.
 - **The first `next-item claim` exits 3**: an open pull request already marks the item (it names it), or the item
   needs the owner. Remove the worktree and branch, and go back to `next-item`.
 - **Open the pull request now, as a draft** (`--draft`), and **don't arm auto-merge**: the draft says the work
@@ -101,7 +106,8 @@ This is the one rule the work skills share for a repo whose README names GitHub 
 `.record`):
 
 - **`todo`**: the line names a todo file. Every step in these skills applies as written.
-- **`issues`**: the line names GitHub issues. There is no todo file to read, mark or delete from, so the
+- **`issues`**: the line names GitHub issues. There is no todo file to read, mark or delete from (and the
+  `claim-before-pr` hook checks nothing), so the
   todo-file steps (`next-item claim`, `next-item release`, removing the entry, follow-ups as entries) give way to the
   issue steps here. Everything else stays: the worktree and branch, tests first, the repo's gates, the `pr`
   skill's review, auto-merge and the clean-up.

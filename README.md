@@ -8,7 +8,7 @@ Two [Claude Code](https://code.claude.com) plugins for agents working in a repos
   writing; the skills that claim an item, build it and land it (`pr` opens the pull request and has a fresh
   agent review it, and `pr-batch` lands several of your own as one); `coordinator`, which makes one session assign the work to
   other agents; `long-loops` and `add-knowledge`; hooks
-  around merging; a hook that puts `next-item` and `park` on the Bash tool's `PATH`; and a hook that offers to share what Claude saves to memory. See [The work plugin](#the-work-plugin).
+  around merging; a hook that refuses a pull request with code and no claim; a hook that puts `next-item` and `park` on the Bash tool's `PATH`; and a hook that offers to share what Claude saves to memory. See [The work plugin](#the-work-plugin).
 
 The guards were written for several agents working in one repository at once, each in its own git worktree.
 They suit a single agent too. Note that a plain clone is its own main checkout, so the main-checkout guards
@@ -93,6 +93,9 @@ for a group of repos, in an overrides file:
   `no-stash` is locked.
 - A `.main-edit-ok` file at a repo's root also lets that repo edit, switch branches and commit in its main
   checkout (`block-main-edits.py`, `guard-branch-switch.py` and `guard-commit-on-main.py`).
+- The work plugin's `claim-before-pr` (its refusal reads `[work:claim-before-pr]`; see [The hooks](#the-hooks))
+  is turned off the same way, in the same file. The work plugin bundles a copy of `guardlib.py` to read it, so
+  for that rule "the plugin's root" below is the work plugin's.
 
 The guards read the first of these files that is set:
 
@@ -128,7 +131,8 @@ in progress: 0 of 2
 ```
 
 `next-item --list` adds every free item in order and every claim, and `--json` gives the same for scripts. Exit
-codes: 0 an answer, 1 an error, 2 unclear, 3 no (the item is someone else's, or a branch is not merged). Its old
+codes: 0 an answer, 1 an error, 2 unclear, 3 no (the item is someone else's, a branch is not merged, or a
+branch has code and no claim). Its old
 name, `goal`, was removed in work 2.0.0: call `next-item`.
 
 **Call `next-item` and `park` by name.** They live in `plugins/work/scripts/`, not a top-level `bin/`, because
@@ -191,7 +195,15 @@ branch_prefix = "work/"               # the work branch is <prefix><slug of the 
 rows = "docs/plan"                    # a plan kept as row files (below)
 rows_name = "plan row"                # a row's item title is "<rows_name> <n>"
 rows_sections = ["ios=Next"]          # rows of Phase ios come just before Next's entries
+docs = ["*.md", "docs/*"]             # changed files that are docs, not code (this is the default)
 ```
+
+**What counts as code.** A branch whose changed files all match a `docs` pattern is docs only, and its pull
+request needs no claim (`next-item claimed`, below). The default is every Markdown file and everything under
+`docs/`. A pattern is matched against the file's whole path from the repo's root, and `*` also matches `/`, so
+`*.md` is a Markdown file in any folder and `docs/*` is everything below `docs/`. A setting replaces the default,
+so list `"*.md"` again to keep it. `next-item` before work 3.3.0 calls `docs` an unknown setting and answers
+unclear, so add it once every machine has 3.3.0.
 
 **A plan kept as row files.** With `rows`, the folder holds only row files: each `<n>.md` holds one markdown
 table row under its header, with `#` and `Step` columns (and optionally `Home`, `Phase` and `Waits on`). `next-item` offers each row as an
@@ -242,6 +254,12 @@ repo's own checks of its entries read it as before:
 - If GitHub can't be reached, `next-item` says claims weren't checked and answers from the local files, taking
   their marks as they are. `next-item claim` refuses until GitHub answers.
 - **In progress** is the number of items claimed this way, so it is stated in one place.
+- **A pull request with code needs a claim.** `next-item claimed [<branch>]` says whether a branch's pull request
+  may open, from local files (it asks GitHub only for the default branch's name). Exit 0: the branch changes only
+  docs; or it carries a claim mark it made (one the default branch didn't have where the branch left it, even on
+  an entry the branch has since deleted); or a mark on the default branch is yours; or the repo has no todo file
+  to mark (no `## How work runs here` section, frozen, or work kept in GitHub issues). Exit 3: it changes code and
+  carries no claim. The `claim-before-pr` hook asks it at `gh pr create` ([The hooks](#the-hooks)).
 - **Stale:** a claim whose pull request has had no activity for 3 days is flagged by `next-item`. It is never
   removed by itself.
 
@@ -278,7 +296,7 @@ id (`one-concern`, `docs-follow-code`, `risky-change`, `new-dependency`, `threat
 
 ### The hooks
 
-On a Bash call the work plugin's Bash hooks (`allow-merge.py`, `review-check.py`) run in one process,
+On a Bash call the work plugin's Bash hooks (`allow-merge.py`, `review-check.py`, `claim-check.py`) run in one process,
 `bash-hooks.py`, which merges their answers: the strictest permission decision with its reason, and every warning.
 
 - **`next-item` and `park` run by name** (`scripts-on-path.py`). At every session start, resume, `/clear` and
@@ -295,6 +313,29 @@ On a Bash call the work plugin's Bash hooks (`allow-merge.py`, `review-check.py`
   skill's step 5: one starting with the agent line, `🤖 **Agent update**` (any agent comment counts, even a status update or a review of an older commit). With
   none, or when GitHub can't be asked within a few seconds, it warns the agent; it does not stop the merge
   (`BLOCKING` in the hook turns that on).
+- **A pull request with code and no claim is refused** (`claim-check.py`, rule id `claim-before-pr`). Before
+  `gh pr create` (or `gh pr new`), draft or not, it asks `next-item claimed` about the branch: the one checked
+  out in the folder the command runs in (after any `cd`), or the one `--head` names. On exit 3 the call is
+  refused in one line that says to run `/work:start-work`, or to add the escape line. The escape line is for
+  work the owner asked for directly that has no todo entry; the pull request's body carries it on a line of its
+  own (case and the final full stop don't matter):
+
+  ```text
+  No backlog item: the owner asked for this directly.
+  ```
+
+  The hook finds it in `--body`, in a heredoc on the command line, or in the `--body-file`. A docs-only branch
+  ([What counts as code](#what-the-repo-states)) and a repo with no todo file to mark open as before; for work
+  kept in GitHub issues nothing is checked, since `next-item` reads no issues. **It never blocks on its own
+  failure:** when `next-item` errors, answers unclear or takes over 10 seconds, or only the shell knows the
+  folder or the branch (`cd "$WT"`, `--head "$B"`), it warns and the pull request opens. A repo turns it off
+  with `claim-before-pr` in the overrides file ([Turning a rule off for a repo](#turning-a-rule-off-for-a-repo)).
+  **Not covered:** a pull request opened any other way (a script that calls `gh`, `gh api`, a GitHub tool or the
+  website); `--web` and `--dry-run`; a pull request into a repo other than the folder's `origin` (`--repo`,
+  `GH_REPO`); `--head` with its value attached (`-Hbranch`), which reads as the checked-out branch. It judges the
+  local branch, not what was pushed. It checks that a mark is there, not that it is on the right entry, and
+  nothing re-checks the body after the pull request is open.
+
 - **Memories are offered to the team** (`memories.py`). After Claude writes a memory
   (`~/.claude/projects/<folder>/memory/<name>.md`) that is not `type: user` and not decided, Claude ends its reply
   with a one-line offer to share it (`/add-knowledge`). At most once a day (20 hours apart), the first session to start lists memories

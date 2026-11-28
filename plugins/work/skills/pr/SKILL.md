@@ -83,6 +83,11 @@ says otherwise about drafts wins.
 
 An existing open pull request: update its title and description if they no longer match.
 
+A new pull request that changes code needs its item's claim: this plugin's hook refuses `gh pr create` on a
+branch with no claim mark, in a repo with a todo file. Claim the item with the `start-work` skill; or, for work
+the owner asked for directly that has no todo entry, put this line in the description, on a line of its own:
+`No backlog item: the owner asked for this directly.`
+
 ### 5. A fresh reviewer agent reviews it
 
 Reading your own diff is not a review. Start a **new** general-purpose agent (not a fork: a fork carries your
