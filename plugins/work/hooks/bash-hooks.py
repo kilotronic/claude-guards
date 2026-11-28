@@ -19,7 +19,7 @@ import sys
 import traceback
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-HOOKS = ("allow-merge.py", "review-check.py")
+HOOKS = ("allow-merge.py", "review-check.py", "claim-check.py")
 # The strictest decision wins.
 STRICTNESS = ("allow", "ask", "deny")
 

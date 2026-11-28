@@ -10,7 +10,8 @@ It reads, from the working copy (so goals edited locally count right away):
 - the todo file: its Defects and Next sections, top first, and the claim marks on their entries;
 - `.claude/work.toml`, optional: other heading names, entries that need the owner, the merge method, and a
   plan kept as row files (`rows`): one markdown table row per `<n>.md` file, offered as `<rows_name> <n>` with
-  the todo section its Phase maps to (`rows_sections`), once no row it waits on is left.
+  the todo section its Phase maps to (`rows_sections`), once no row it waits on is left; and which changed files
+  are docs, not code (`docs`).
 
 Claims are the exception: the work's own pull request is the claim. An item is in progress while an open pull
 request into the default branch, found by asking GitHub (`gh repo view`, not the local `origin/HEAD`, which can be
@@ -25,10 +26,11 @@ exits 2; it never guesses.
 
 `next-item claim` commits the mark on one entry's line as the work branch's first commit; the claim holds once the
 work's pull request is open. `next-item release` commits the mark away. `next-item merged <branch>` says whether a branch's
-work is on main.
+work is on main. `next-item claimed [<branch>]` says whether a branch's pull request may open: it changes only docs, it
+carries a claim mark, or the repo keeps no todo file.
 
 Exit codes: 0 an answer, 1 an error, 2 unclear (what is missing is named), 3 no (the item is someone else's,
-or the branch is not merged).
+the branch is not merged, or it has code and no claim).
 
 Python 3.9 or later, standard library only.
 """
@@ -38,6 +40,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime as dt
+import fnmatch
 import getpass
 import hashlib
 import json
@@ -83,6 +86,9 @@ class Settings:
     rows_sections: list[str] = field(
         default_factory=list
     )  # `<phase>=<section>`: rows of that Phase come just before that next section's entries
+    docs: list[str] = field(
+        default_factory=lambda: ["*.md", "docs/*"]
+    )  # changed files that are docs, not code; `*` also matches `/`
 
 
 _KEYS = {
@@ -94,6 +100,7 @@ _KEYS = {
     "rows": str,
     "rows_name": str,
     "rows_sections": list,
+    "docs": list,
 }
 
 
@@ -1619,6 +1626,90 @@ def merged(args: argparse.Namespace) -> tuple[int, dict]:
     }
 
 
+def claimed(args: argparse.Namespace) -> tuple[int, dict]:
+    """Whether a branch's pull request may open: its work is docs only, or it carries a claim. A claim is a mark
+    the branch made (one the default branch didn't have where the branch left it, even on an entry the branch has
+    since deleted), or a mark on the default branch that is yours. A repo with no todo file to mark (no README
+    section, frozen, or work kept in GitHub issues) asks for none. Local reads only, apart from the default
+    branch's name."""
+    repo = Repo(Path(args.C or "."), fetch=False)
+    facts = parse_readme(repo.read("README.md") or "")
+    if facts is None or "frozen" in facts or in_issues(facts):
+        why = (
+            f"the README has no `## {SECTION}` section"
+            if facts is None
+            else "this repo is frozen"
+            if "frozen" in facts
+            else "this repo records its work in GitHub issues"
+        )
+        return OK, {
+            "status": "ok",
+            "claimed": None,
+            "message": f"no claim needed: {why}",
+        }
+    path = todo_path(facts)
+    if path is None:
+        raise Unclear("the **Work is recorded in:** line names no todo file")
+    text = repo.read(SETTINGS_PATH)
+    try:
+        settings = parse_settings(text) if text is not None else Settings()
+    except ValueError as e:
+        raise Unclear(str(e)) from None
+    repo.require_ref()
+    name = args.branch
+    head = "HEAD" if name is None else ""
+    for ref in (f"refs/heads/{name}", f"refs/remotes/origin/{name}"):
+        if not head and not name.startswith("-") and repo.has_commit(ref):
+            head = ref
+    if not head:
+        raise RuntimeError(f"no branch {name} here or on origin")
+    base = run(["git", "merge-base", repo.ref, head], repo.root).stdout.strip()
+    changed = run(
+        ["git", "diff", "--name-only", "--no-renames", "-z", base, head], repo.root
+    ).stdout.split("\0")
+    code = [
+        f
+        for f in changed
+        if f
+        and f != path
+        and not (settings.rows and f.startswith(settings.rows.rstrip("/") + "/"))
+        and not any(fnmatch.fnmatchcase(f, pattern) for pattern in settings.docs)
+    ]
+    out: dict = {"status": "ok", "claimed": None, "warnings": repo.warnings}
+    if not code:
+        return OK, {**out, "message": "no claim needed: the branch changes only docs"}
+    before = repo.todo_at(path, settings, ref=base).entries
+    was = {key(e.title): e.claim for e in before if e.claim}
+    made = [
+        k
+        for k, c in _branch_marks(
+            repo, head, path, settings, {key(e.title) for e in before}
+        ).items()
+        if not (k in was and was[k].mark == c.mark)
+    ]
+    if made:
+        return OK, {
+            **out,
+            "claimed": True,
+            "message": "claimed: the branch carries a claim mark",
+        }
+    me = me_from_env(args.as_)
+    if any(e.claim and me.holds(e.claim) for e in repo.todo_at(path, settings).entries):
+        return OK, {
+            **out,
+            "claimed": True,
+            "message": f"claimed: a mark on {repo.ref} is yours",
+        }
+    return NO, {
+        **out,
+        "status": "no",
+        "claimed": False,
+        "code": code,
+        "message": f"not claimed: the branch changes code ({code[0]}{', ...' if len(code) > 1 else ''}) and carries"
+        " no claim mark",
+    }
+
+
 def _common(suppress: bool) -> argparse.ArgumentParser:
     """The shared options. The subcommands' copies default to SUPPRESS, so an option typed before the subcommand
     (`next-item --json claim X`) is not overwritten by the copy's default."""
@@ -1700,6 +1791,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="is this branch's work on the default branch?",
     )
     m.add_argument("branch")
+    d = sub.add_parser(
+        "claimed",
+        parents=[sub_common],
+        help="may this branch's pull request open: docs only, or carrying a claim mark?",
+    )
+    d.add_argument("branch", nargs="?", help="default: the branch checked out")
     return p
 
 
@@ -1717,6 +1814,8 @@ def main(argv: list[str] | None = None) -> int:
             rc, out = release(args, today)
         elif args.command == "merged":
             rc, out = merged(args)
+        elif args.command == "claimed":
+            rc, out = claimed(args)
         else:
             rc, out = answer(args, today)
     except Unclear as e:
@@ -1730,7 +1829,7 @@ def main(argv: list[str] | None = None) -> int:
         return ERROR
     if args.json:
         print(json.dumps(out, indent=2))
-    elif args.command in ("claim", "release") and out.get("status") == "ok":
+    elif args.command in ("claim", "release", "claimed") and out.get("status") == "ok":
         print(out["message"])
         for w in out.get("warnings") or []:
             print(f"warning: {w}")

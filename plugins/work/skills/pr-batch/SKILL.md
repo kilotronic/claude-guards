@@ -181,7 +181,9 @@ ones and why, each conflict and how it was resolved, and the check results. Remo
 `git branch -D` the branch.
 
 **Claim the batch:** look once more for an open `batch/` pull request (step 0); none, so push the branch and open
-the combined pull request, ready and not armed, with its real title and description, in plain words:
+the combined pull request, ready and not armed, with its real title and description, in plain words. When none
+of the batched pull requests carries a claim mark (each has the line `No backlog item: the owner asked for this directly.` in its description), end the
+batch's description with that line too, or this plugin's `claim-before-pr` hook refuses `gh pr create`:
 
 ```text
 Lands #a, #b, #c together, one commit each, so the checks run once instead of N times.

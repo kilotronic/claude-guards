@@ -1,5 +1,5 @@
 {
-  "description": "Lets an agent run a plain gh pr merge in auto mode, never with --admin or --body-file; warns at gh pr merge when the pull request has no fresh-review comment; offers to share what Claude saves to memory with the team, and lists memories still waiting once a day; parks work at a usage limit on its pull request (label parked) and lists parked work at start-up; puts next-item and park on the Bash tool's PATH",
+  "description": "Lets an agent run a plain gh pr merge in auto mode, never with --admin or --body-file; warns at gh pr merge when the pull request has no fresh-review comment; refuses gh pr create on a branch with code and no claim mark; offers to share what Claude saves to memory with the team, and lists memories still waiting once a day; parks work at a usage limit on its pull request (label parked) and lists parked work at start-up; puts next-item and park on the Bash tool's PATH",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,7 +8,7 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bash-hooks.py\"",
-            "timeout": 15
+            "timeout": 25
           }
         ]
       }
