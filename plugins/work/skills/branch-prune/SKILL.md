@@ -79,13 +79,15 @@ uses too):
   - every `+` commit has a commit of the same subject on `$base` with the same added and removed lines. A
     rebase merge onto a base that had moved shows this way: the lines around each change differ, so the patch
     id does too;
-  - merging the branch into `$base` would change nothing (`git merge-tree`, git 2.38 or later).
+  - merging the branch into `$base` would change nothing (`git merge-tree`, git 2.38 or later; not tried in
+    a repo with a merge driver configured).
 - Exit `3` → none of those → **keep** (a hypothesis, not a verdict; step 2a). When a same-subject commit on
   `$base` shares only some of a commit's changed lines, the output names both commits and the count
   (`<commit> matches <base commit> on origin/$base in 9 of 11 changed lines`), and says `suspect` when every
   `+` commit matches on at least half (`"suspect": true` and `evidence` with `--json`): the work probably
   landed with edits.
 - Exit `2` → `gh` couldn't be asked about merged pull requests → **keep**, and say the check was incomplete.
+  It can say `suspect` too.
 
 Build two lists: PRUNE (exit 0, no open PR, not protected) and KEEP (everything else, with
 the reason: open PR #, unmerged commit count, or protected).

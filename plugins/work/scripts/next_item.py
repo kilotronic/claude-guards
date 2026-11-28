@@ -1656,31 +1656,45 @@ def merged(args: argparse.Namespace) -> tuple[int, dict]:
 def _landed(repo: Repo, ref: str, plus: list[str]) -> tuple[str | None, list[dict]]:
     """Two more proofs that a branch's work is on main, for commits `git cherry` could not match (`plus`): a rebase
     onto a moved main changes a hunk's context lines, and so its patch id. Either merging the branch into main
-    would change nothing (`git merge-tree --write-tree`, git 2.38 or later; an older git proves nothing here), or
-    every commit has a commit of the same subject on main, since the branch left it, with the same changed lines.
+    would change nothing (`git merge-tree --write-tree`, git 2.38 or later; an older git proves nothing here, and
+    nor does a repo with a merge driver configured, which can keep main's file whatever the branch changed), or
+    every commit has a commit of its own with the same subject on main, since the branch left it and not already
+    matched as a patch, with the same changed lines.
     Returns why it is merged, or None and what the same-subject commits matched: mostly the same lines suggests
     a commit that landed with edits, which is the caller's to report and never merged."""
+    drivers = run(
+        ["git", "config", "--get-regexp", r"^merge\..*\.driver$"], repo.root, False
+    )
     merge = run(["git", "merge-tree", "--write-tree", repo.ref, ref], repo.root, False)
     tree = run(["git", "rev-parse", repo.ref + "^{tree}"], repo.root).stdout.strip()
-    if merge.returncode == 0 and merge.stdout.split("\n", 1)[0].strip() == tree:
+    if (
+        drivers.returncode == 1  # git config's "no such key"; an error proves nothing
+        and not drivers.stdout.strip()
+        and merge.returncode == 0
+        and merge.stdout.split("\n", 1)[0].strip() == tree
+    ):
         return f"merging it into {repo.ref} changes nothing (git merge-tree)", []
-    fork = run(["git", "merge-base", repo.ref, ref], repo.root, False).stdout.strip()
-    if not fork:
-        return None, []
     on_base: dict[str, list[str]] = {}
-    log = run(["git", "log", "--format=%H %s", f"{fork}..{repo.ref}"], repo.root)
-    for line in log.stdout.splitlines():
-        sha, _, subject = line.partition(" ")
-        on_base.setdefault(subject, []).append(sha)
+    # Main's commits that are no commit of the branch as a patch (`--cherry-pick`), with NUL between them: a
+    # subject can hold a carriage return or another line break, never a NUL.
+    log = run(
+        ["git", "log", "-z", "--format=%H %s", "--cherry-pick", "--left-only"]
+        + [f"{repo.ref}...{ref}"],
+        repo.root,
+    )
+    for record in log.stdout.split("\0"):
+        sha, _, subject = record.partition(" ")
+        if re.fullmatch(r"[0-9a-f]{40,64}", sha):
+            on_base.setdefault(subject, []).append(sha)
     found: list[dict] = []
+    used: set[str] = set()  # a commit on main answers for one commit of the branch
     for sha in plus:
-        subject = run(["git", "log", "-1", "--format=%s", sha], repo.root).stdout.strip(
-            "\n"
-        )
+        show = run(["git", "log", "-z", "-1", "--format=%s", sha], repo.root)
+        subject = show.stdout.rstrip("\0")
         mine = _changed_lines(repo, sha)
         best: dict | None = None
         for other in on_base.get(subject, []) if mine else []:
-            theirs = _changed_lines(repo, other)
+            theirs = None if other in used else _changed_lines(repo, other)
             if not theirs:
                 continue
             matched = sum((mine & theirs).values())
@@ -1694,6 +1708,7 @@ def _landed(repo: Repo, ref: str, plus: list[str]) -> tuple[str | None, list[dic
                 }
         if best:
             found.append(best)
+            used.add(best["base_commit"])
     if len(found) == len(plus) and all(e["matched"] == e["total"] for e in found):
         return (
             f"every commit is on {repo.ref} under the same subject with the same changed lines",

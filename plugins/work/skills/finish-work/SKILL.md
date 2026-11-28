@@ -47,7 +47,7 @@ gh pr view <n> --json state -q .state    # must print MERGED
 
 A pull request the `pr-batch` skill closed and batched is done when the batch merged: its comment
 "Landed in #<combined>" says where. Confirm that one shows `MERGED` and that the work is on main
-(`git log origin/main`), then clean up below; `next-item merged` won't count a branch the batch landed.
+(`git log origin/main`), then clean up below; `next-item merged` may not count a branch the batch landed.
 
 `next-item merged` is the same test branch-prune uses: every commit on main as the same patch (`git cherry`), a
 merged pull request whose head is the branch's tip (a squash merge), every commit on main under the same

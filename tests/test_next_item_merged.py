@@ -263,3 +263,44 @@ def test_without_github_the_changed_lines_still_prove_a_merge(tmp_path: Path) ->
     p.gh_fails()
     rc, out = p.json("merged", "work/snooze")
     assert rc == 0, out
+
+
+def test_a_subject_on_main_cannot_name_a_commit_as_its_match(tmp_path: Path) -> None:
+    p = app_project(tmp_path)
+    tip = p.branch("work/snooze", "2026-11-21", {"app.txt": edited(n6="six")})
+    # A carriage return (or another line break) in a subject on main must not read as a second line of the log.
+    for n, brk in enumerate(("\r", "\x0c", "\x1e", "\u2028")):
+        p.push_files({f"other{n}.txt": "x\n"}, f"chore: innocuous{brk}{tip} {SUBJECT}")
+    rc, out = p.json("merged", "work/snooze")
+    assert rc == 3, out
+    assert out["evidence"] == []
+
+
+def test_a_merge_driver_that_keeps_mains_file_proves_nothing(tmp_path: Path) -> None:
+    p = app_project(tmp_path)
+    p.push_files({".gitattributes": "app.txt merge=ours\n"}, "chore: keep ours")
+    git(p.clone, "config", "merge.ours.driver", "true")
+    p.branch("work/snooze", "2026-11-21", {"app.txt": edited(n6="six")})
+    p.push_files({"app.txt": edited(n2="two")}, "fix: two")
+    rc, out = p.json("merged", "work/snooze")
+    assert rc == 3, out
+
+
+def test_one_commit_on_main_matches_one_commit_of_the_branch(tmp_path: Path) -> None:
+    p = app_project(tmp_path)
+    git(p.clone, "checkout", "-q", "-B", "work/snooze", "origin/main")
+    for _ in range(2):
+        with (p.clone / "app.txt").open("a") as f:
+            f.write("again\n")
+        git(p.clone, *IDENTITY, "commit", "-q", "-am", SUBJECT)
+    git(p.clone, "push", "-q", "origin", "HEAD:refs/heads/work/snooze")
+    git(p.clone, "checkout", "-q", "--detach", "origin/main")
+    # Main moves first, so its commit is not the branch's first one under the same SHA.
+    p.push_files({"app.txt": edited(n4="four")}, "fix: four")
+    p.push_files({"app.txt": edited(n4="four") + "again\n"}, SUBJECT)
+    # Main's commit is the first one's patch, so it is not there to answer for the second one's changed lines.
+    cherry = git(p.clone, "cherry", "origin/main", "origin/work/snooze")
+    assert [line[0] for line in cherry.splitlines()] == ["-", "+"]
+    rc, out = p.json("merged", "work/snooze")
+    assert rc == 3, out
+    assert out["evidence"] == []

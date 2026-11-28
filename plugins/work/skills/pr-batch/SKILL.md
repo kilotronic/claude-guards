@@ -279,7 +279,7 @@ gh pr comment <n> --body "Landed in #<combined> as <sha>."
 Reopen (and comment on) any original whose work is not on `main`; one its owner took back is theirs. A pull request dropped from
 the batch after it was closed is reopened as soon as it is dropped, with the reason. Re-point each open pull
 request stacked above the batch's top onto `main` (`gh pr edit <n> --base main`). Other sessions may still have a
-worktree on an original's branch; leave those to their owners. A closed original's branch never counts as merged
+worktree on an original's branch; leave those to their owners. A closed original's branch seldom counts as merged
 for `next-item merged` or branch-prune, so delete the branch on GitHub of each landed original of your own with no
 open pull request based on it (`git push origin --delete <head>`); someone else's is theirs to delete.
 
