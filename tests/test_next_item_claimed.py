@@ -145,3 +145,21 @@ def test_settings_it_cannot_read_are_unclear(tmp_path: Path) -> None:
     work(p, {"src/snooze.py": "x = 1\n"})
     rc, out = p.json("claimed")
     assert rc == 2 and "docs" in out["missing"][0]
+
+
+def test_the_todo_file_and_the_plan_rows_are_never_code(tmp_path: Path) -> None:
+    readme = README.replace("`docs/todo.md`", "`TODO.txt`")
+    row = "| # | Step |\n| --- | --- |\n| 1 | Build it |\n"
+    p = make_project(
+        tmp_path,
+        readme=readme,
+        todo=None,
+        extra={
+            "TODO.txt": TODO,
+            ".claude/work.toml": 'rows = "plan"\n',
+            "plan/1.md": row,
+        },
+    )
+    work(p, {"TODO.txt": TODO + "- **One more.** Later.\n", "plan/2.txt": "x\n"})
+    rc, out = p.json("claimed")
+    assert (rc, out["claimed"]) == (0, None), out

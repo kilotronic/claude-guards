@@ -200,7 +200,7 @@ docs = ["*.md", "docs/*"]             # changed files that are docs, not code (t
 
 **What counts as code.** A branch whose changed files all match a `docs` pattern is docs only, and its pull
 request needs no claim (`next-item claimed`, below). The default is every Markdown file and everything under
-`docs/`. A pattern is matched against the file's whole path from the repo's root, and `*` also matches `/`, so
+`docs/`; the todo file and the plan's row files are never code. A pattern is matched against the file's whole path from the repo's root, and `*` also matches `/`, so
 `*.md` is a Markdown file in any folder and `docs/*` is everything below `docs/`. A setting replaces the default,
 so list `"*.md"` again to keep it. `next-item` before work 3.3.0 calls `docs` an unknown setting and answers
 unclear, so add it once every machine has 3.3.0.
@@ -324,17 +324,21 @@ On a Bash call the work plugin's Bash hooks (`allow-merge.py`, `review-check.py`
   No backlog item: the owner asked for this directly.
   ```
 
-  The hook finds it in `--body`, in a heredoc on the command line, or in the `--body-file`. A docs-only branch
-  ([What counts as code](#what-the-repo-states)) and a repo with no todo file to mark open as before; for work
-  kept in GitHub issues nothing is checked, since `next-item` reads no issues. **It never blocks on its own
-  failure:** when `next-item` errors, answers unclear or takes over 10 seconds, or only the shell knows the
-  folder or the branch (`cd "$WT"`, `--head "$B"`), it warns and the pull request opens. A repo turns it off
-  with `claim-before-pr` in the overrides file ([Turning a rule off for a repo](#turning-a-rule-off-for-a-repo)).
+  The hook finds it in `--body`, in a heredoc on the command line, or in a `--body-file` it can read; a body
+  only the shell knows (`--body "$(cat body.md)"`, `--body-file "$B"`, `-F -`, `--fill`) is not read, and the
+  refusal says so. A docs-only branch ([What counts as code](#what-the-repo-states)) and a repo with no todo file
+  to mark open as before; for work kept in GitHub issues nothing is checked, since `next-item` reads no issues.
+  **It never blocks on its own failure:** it warns and the pull request opens when `next-item` errors, answers
+  unclear or takes over 10 seconds; when only the shell knows the folder or the branch (`cd "$WT"`,
+  `--head "$B"`); and when an earlier command in the same call changes the branch (`git commit`, `git switch`,
+  `next-item claim` and the like), since the hook runs before the call does. A repo turns it off with
+  `claim-before-pr` in the overrides file ([Turning a rule off for a repo](#turning-a-rule-off-for-a-repo)).
   **Not covered:** a pull request opened any other way (a script that calls `gh`, `gh api`, a GitHub tool or the
-  website); `--web` and `--dry-run`; a pull request into a repo other than the folder's `origin` (`--repo`,
-  `GH_REPO`); `--head` with its value attached (`-Hbranch`), which reads as the checked-out branch. It judges the
-  local branch, not what was pushed. It checks that a mark is there, not that it is on the right entry, and
-  nothing re-checks the body after the pull request is open.
+  website); `--web`, `--dry-run` and `--help`; a pull request into a repo other than the folder's `origin`
+  (`--repo`, `GH_REPO`); `--head` with its value attached (`-Hbranch`), which reads as the checked-out branch.
+  It judges the local branch against the default branch, whatever `--base` says, and not what was pushed. It
+  checks that a mark is there, not that it is on the right entry; the escape line counts anywhere in the call;
+  and nothing looks again once the pull request is open.
 
 - **Memories are offered to the team** (`memories.py`). After Claude writes a memory
   (`~/.claude/projects/<folder>/memory/<name>.md`) that is not `type: user` and not decided, Claude ends its reply

@@ -1670,7 +1670,10 @@ def claimed(args: argparse.Namespace) -> tuple[int, dict]:
     code = [
         f
         for f in changed
-        if f and not any(fnmatch.fnmatchcase(f, pattern) for pattern in settings.docs)
+        if f
+        and f != path
+        and not (settings.rows and f.startswith(settings.rows.rstrip("/") + "/"))
+        and not any(fnmatch.fnmatchcase(f, pattern) for pattern in settings.docs)
     ]
     out: dict = {"status": "ok", "claimed": None, "warnings": repo.warnings}
     if not code:

@@ -100,6 +100,7 @@ def test_the_escape_line_in_the_body_opens_it(unclaimed: Project) -> None:
         f'gh pr create --draft --title t --body "Adds the button.\n\n{ESCAPE}"',
         f"gh pr create --title t --body \"$(cat <<'EOF'\nAdds it.\n\n{ESCAPE.lower()}\nEOF\n)\"",
         f"gh pr create --title t --body '  {ESCAPE.rstrip('.')}  '",
+        f"gh pr create --title t --body='{ESCAPE}'",
         "gh pr create --title t --body-file body.md",
         "gh pr create --title t -F body.md",
     ):
@@ -186,6 +187,29 @@ def test_a_folder_or_branch_only_the_shell_knows_warns(unclaimed: Project) -> No
         assert "could not check" in answer["systemMessage"]
 
 
+def test_a_line_that_changes_the_branch_first_warns(tmp_path: Path) -> None:
+    # The hook runs before the line does, so it can't judge the branch the pull request will open from.
+    p = make_project(tmp_path)
+    work(p, {"README.md": README + "\nMore.\n"})
+    for before in (
+        "git commit -am 'feat: code'",
+        "git add -A && git commit -m x && git push",
+        "git switch work/other",
+        "next-item claim 'Add a snooze button' && git push",
+    ):
+        answer, _ = run(p, f"{before} && {CREATE}")
+        assert answer is not None, before
+        assert "permissionDecision" not in answer["hookSpecificOutput"], before
+        assert "could not check" in answer["systemMessage"], before
+    assert run(p, f"git push -u origin work/snooze && {CREATE}")[0] is None
+    assert run(p, f"{CREATE} && git commit -am later")[0] is None
+
+
+def test_the_refusal_says_how_the_body_must_be_given(unclaimed: Project) -> None:
+    text = refusal(run(unclaimed, 'gh pr create --title t --body-file "$B"')[0])
+    assert "`--body` text or a `--body-file` the hook can read" in text
+
+
 def test_other_commands_are_untouched(unclaimed: Project) -> None:
     turn_off(unclaimed.clone, "no-such-rule")  # gives the clone a GitHub origin
     for command in (
@@ -195,6 +219,7 @@ def test_other_commands_are_untouched(unclaimed: Project) -> None:
         "git commit -m 'gh pr create --draft'",
         f"{CREATE} --web",
         f"{CREATE} --dry-run",
+        f"{CREATE} --help",
         f"{CREATE} --repo octo/other",
         f"GH_REPO=octo/other {CREATE}",
         "",

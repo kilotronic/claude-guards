@@ -79,6 +79,13 @@ GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x` an
   seen at all. Reasoned, not yet seen in a session. Shape: ask `next-item claimed` again at `gh pr ready`, reading
   the escape line from the open pull request's body; or have `next-item` list open pull requests with code and no
   claim, so `orient` shows them.
+- **The claim check's narrow gaps, found in review.** `next-item claimed` compares with the default branch and the
+  hook ignores `--base`: a backport can be refused for files it never touched, and a branch stacked on a claimed
+  one passes on that one's mark. A second pull request for an item your own open pull request holds has no mark
+  to carry (`next-item claim` exits 3), so only the escape line opens it. A branch whose claim commit and
+  entry-deleting commit were squashed into one reads as unclaimed. The escape line counts anywhere in the call
+  (a title, another heredoc), and a body only the shell knows is not read. `-b"text"` and a `-w` inside a
+  cluster (`-dw`) are not understood. All reasoned or reproduced by hand; none seen in a session.
 - **The claim check's `docs` patterns can only add.** A repo can't say "everything under `.claude/` is docs except
   `.claude/hooks/`". Shape: a pattern starting with `!` takes files back out.
 - **The claim check does nothing for work kept in GitHub issues.** Shape: for `record: issues`, a pull request

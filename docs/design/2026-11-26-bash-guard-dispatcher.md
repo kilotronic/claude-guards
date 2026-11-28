@@ -39,7 +39,8 @@ runs `bash-guards.py` (guards) or `bash-hooks.py` (work). A Bash call then start
 
 - **The time budget is one limit for all.** The guards run one after another, so the dispatcher's limit is the
   sum of what they can take: 30 s for the guards (the git calls inside them have their own 5 to 10 s timeouts)
-  and 15 s for the work hooks (`review-check.py`'s 9 s GitHub budget plus margin, as before). On an ordinary
+  and 15 s for the work hooks (`review-check.py`'s 9 s GitHub budget plus margin, as before; 25 s since work
+  3.3.0, whose `claim-check.py` gives `next-item` 10 s). On an ordinary
   call they take tens of milliseconds together. A guard that hangs past the limit now fails open for all of them
   at once, where before it failed open for itself only; no guard has hung in the transcripts, and every
   subprocess a guard starts has a timeout except the ours-theirs guard's `git cat-file --batch` read, which the
@@ -54,7 +55,7 @@ runs `bash-guards.py` (guards) or `bash-hooks.py` (work). A Bash call then start
 ## The work plugin
 
 The work plugin can be installed without the guards plugin, so it keeps a dispatcher of its own: `bash-hooks.py`
-imports `allow-merge.py` and `review-check.py` and calls each one's `decide(event)`. Each answers with a hook
+imports `allow-merge.py` and `review-check.py` (and, since work 3.3.0, `claim-check.py`) and calls each one's `decide(event)`. Each answers with a hook
 JSON object or nothing; the dispatcher merges them into one: the strictest `permissionDecision` (deny, then ask,
 then allow) with its reason, and the `additionalContext` and `systemMessage` texts joined. Other top-level keys (`continue`, `stopReason`) are
 not carried over when both answer, since neither hook writes them. A hook that crashes leaves its traceback on

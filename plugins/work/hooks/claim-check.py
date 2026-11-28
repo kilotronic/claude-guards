@@ -56,8 +56,22 @@ VALUE_FLAGS = {
 HEAD_FLAGS = {"-H", "--head"}
 BODY_FILE_FLAGS = {"-F", "--body-file"}
 # These open no pull request from here: the browser's form does, or nothing does.
-UNCHECKED_FLAGS = {"-w", "--web", "--dry-run"}
+UNCHECKED_FLAGS = {"-w", "--web", "--dry-run", "-h", "--help"}
 UNKNOWN = "only the shell knows its folder or branch"
+# The hook runs before the call does, so what these leave checked out is not there to judge yet.
+MOVED = "an earlier command in the same call changes the branch"
+MOVES = {
+    "am",
+    "checkout",
+    "cherry-pick",
+    "commit",
+    "merge",
+    "pull",
+    "rebase",
+    "reset",
+    "revert",
+    "switch",
+}
 
 
 def options(args: list[str]) -> tuple[str | None, list[str], bool]:
@@ -125,8 +139,16 @@ def ask_next_item(place: str, head: str | None, session: str | None) -> tuple[in
     return done.returncode, said[-1] if said else f"next-item exited {done.returncode}"
 
 
+def moves(command: guardlib.Command) -> bool:
+    """The command can change which commits the branch holds: a git command in MOVES, or `next-item claim`."""
+    git = guardlib.git_args(command.argv)
+    if git is not None:
+        return git[0] in MOVES
+    return os.path.basename((command.argv or [""])[0]) == "next-item"
+
+
 def judge(
-    command: guardlib.Command, text: str, session: str | None
+    command: guardlib.Command, text: str, session: str | None, moved: bool
 ) -> tuple[int, str] | None:
     """`next-item claimed`'s answer for one command, or None when the command is not one to check."""
     gh = guardlib.gh_args(command.argv)
@@ -148,8 +170,11 @@ def judge(
         return None
     if repo and guardlib.slug("/" + repo) != guardlib.origin_repo(root):
         return None
-    if escaped([text, *args, *(read(path, place) for path in files)]):
+    values = [word.partition("=")[2] for word in args]
+    if escaped([text, *args, *values, *(read(path, place) for path in files)]):
         return None
+    if moved:
+        return 1, MOVED
     if head is not None:
         head = head.rsplit(":", 1)[-1]
         if not head or head.startswith("-") or set(head) & set("$`"):
@@ -165,8 +190,12 @@ def decide(event: dict) -> dict | None:
         return None
     session = event.get("session_id")
     refused, unchecked, place = [], [], None
+    moved = False
     for command in guardlib.bash_commands(event):
-        found = judge(command, text, session if isinstance(session, str) else None)
+        found = judge(
+            command, text, session if isinstance(session, str) else None, moved
+        )
+        moved = moved or moves(command)
         if found is None or found[0] == 0:
             continue
         if found[0] == NO:
@@ -181,7 +210,7 @@ def decide(event: dict) -> dict | None:
             note = None
         reason = (
             f"work: refusing `gh pr create`: {'; '.join(refused)}. Run /work:start-work to claim the item first; or, for"
-            f" work the owner asked for directly that has no todo entry, add this line to the pull request's body: {ESCAPE}"
+            f" work the owner asked for directly that has no todo entry, add this line to the pull request's body, given as `--body` text or a `--body-file` the hook can read: {ESCAPE}"
         )
         return {
             "hookSpecificOutput": {
