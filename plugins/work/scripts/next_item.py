@@ -1656,22 +1656,17 @@ def merged(args: argparse.Namespace) -> tuple[int, dict]:
 def _landed(repo: Repo, ref: str, plus: list[str]) -> tuple[str | None, list[dict]]:
     """Two more proofs that a branch's work is on main, for commits `git cherry` could not match (`plus`): a rebase
     onto a moved main changes a hunk's context lines, and so its patch id. Either merging the branch into main
-    would change nothing (`git merge-tree --write-tree`, git 2.38 or later; an older git proves nothing here, and
-    nor does a repo with a merge driver configured, which can keep main's file whatever the branch changed), or
+    would change nothing (`git merge-tree --write-tree`; proves nothing unless `_plain_merge`), or
     every commit has a commit of its own with the same subject on main, since the branch left it and not already
     matched as a patch, with the same changed lines.
     Returns why it is merged, or None and what the same-subject commits matched: mostly the same lines suggests
     a commit that landed with edits, which is the caller's to report and never merged."""
-    drivers = run(
-        ["git", "config", "--get-regexp", r"^merge\..*\.driver$"], repo.root, False
-    )
     merge = run(["git", "merge-tree", "--write-tree", repo.ref, ref], repo.root, False)
     tree = run(["git", "rev-parse", repo.ref + "^{tree}"], repo.root).stdout.strip()
     if (
-        drivers.returncode == 1  # git config's "no such key"; an error proves nothing
-        and not drivers.stdout.strip()
-        and merge.returncode == 0
+        merge.returncode == 0
         and merge.stdout.split("\n", 1)[0].strip() == tree
+        and _plain_merge(repo, ref)
     ):
         return f"merging it into {repo.ref} changes nothing (git merge-tree)", []
     on_base: dict[str, list[str]] = {}
@@ -1715,6 +1710,40 @@ def _landed(repo: Repo, ref: str, plus: list[str]) -> tuple[str | None, list[dic
             found,
         )
     return None, found
+
+
+def _plain_merge(repo: Repo, ref: str) -> bool:
+    """Every file that differs between main and the branch merges git's default way. A `merge` attribute (in
+    either side's `.gitattributes` or this clone's own) or `merge.default` can name a driver that keeps main's
+    lines whatever the branch changed (`union`, or a configured one), and then a merge that changes nothing
+    proves nothing. False too when git can't say: `check-attr --source` needs git 2.40."""
+    if (
+        run(["git", "config", "--get", "merge.default"], repo.root, False).returncode
+        != 1
+    ):
+        return False  # 1 is git config's "not set"
+    try:
+        names = subprocess.run(
+            ["git", "diff", "--name-only", "--no-renames", "-z", repo.ref, ref],
+            cwd=repo.root,
+            capture_output=True,
+            timeout=60,
+            check=True,
+        ).stdout
+        for source in (repo.ref, ref):
+            attrs = subprocess.run(
+                ["git", "check-attr", "--source", source, "--stdin", "-z", "merge"],
+                cwd=repo.root,
+                input=names,
+                capture_output=True,
+                timeout=60,
+                check=True,
+            ).stdout.split(b"\0")
+            if any(value != b"unspecified" for value in attrs[2::3]):
+                return False
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
 
 
 def _changed_lines(repo: Repo, sha: str) -> Counter | None:

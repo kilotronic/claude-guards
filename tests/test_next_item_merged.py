@@ -304,3 +304,23 @@ def test_one_commit_on_main_matches_one_commit_of_the_branch(tmp_path: Path) -> 
     rc, out = p.json("merged", "work/snooze")
     assert rc == 3, out
     assert out["evidence"] == []
+
+
+@pytest.mark.parametrize("how", ["committed", "info", "config"])
+def test_a_union_merge_that_keeps_mains_line_proves_nothing(
+    tmp_path: Path, how: str
+) -> None:
+    p = app_project(tmp_path)
+    if how == "committed":
+        p.push_files({".gitattributes": "app.txt merge=union\n"}, "chore: union")
+    elif how == "info":
+        info = Path(git(p.clone, "rev-parse", "--git-path", "info/attributes").strip())
+        (p.clone / info).parent.mkdir(exist_ok=True)
+        (p.clone / info).write_text("app.txt merge=union\n")
+    else:
+        git(p.clone, "config", "merge.default", "union")
+    # The branch deletes a line that main then rewrites: a union merge keeps main's line, so main's tree.
+    p.branch("work/snooze", "2026-11-21", {"app.txt": LINES.replace("line 6\n", "")})
+    p.push_files({"app.txt": edited(n6="six")}, "fix: six")
+    rc, out = p.json("merged", "work/snooze")
+    assert rc == 3, out

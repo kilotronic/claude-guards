@@ -276,9 +276,10 @@ on the default branch, the name decides.
 `next-item merged <branch>` says whether a branch's work is on main: every commit there as the same patch, or a
 merged pull request ending at the branch's tip, as a squash merge leaves it. A rebase onto a main that had moved
 changes a patch's surrounding lines, so it also counts every commit being on main under the same subject with the
-same added and removed lines, and a merge into main that would change nothing (`git merge-tree`, git 2.38 or
-later, and no merge driver configured). When a same-subject commit shares only some of the changed lines, the answer stays "not merged" (exit 3)
-and gives the counts, as a suspect to read by hand.
+same added and removed lines, and a merge into main that would change nothing (`git merge-tree`; git 2.40 or
+later, and no `merge` attribute or `merge.default` on the files that differ). When a same-subject commit shares
+only some of the changed lines, the answer stays "not merged" (exit 3) and gives the counts, as a suspect to read
+by hand.
 
 ### The skills
 

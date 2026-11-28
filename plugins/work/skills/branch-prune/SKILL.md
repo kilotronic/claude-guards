@@ -79,8 +79,8 @@ uses too):
   - every `+` commit has a commit of the same subject on `$base` with the same added and removed lines. A
     rebase merge onto a base that had moved shows this way: the lines around each change differ, so the patch
     id does too;
-  - merging the branch into `$base` would change nothing (`git merge-tree`, git 2.38 or later; not tried in
-    a repo with a merge driver configured).
+  - merging the branch into `$base` would change nothing (`git merge-tree`; needs git 2.40 or later, and
+    no `merge` attribute or `merge.default` setting on the files that differ).
 - Exit `3` → none of those → **keep** (a hypothesis, not a verdict; step 2a). When a same-subject commit on
   `$base` shares only some of a commit's changed lines, the output names both commits and the count
   (`<commit> matches <base commit> on origin/$base in 9 of 11 changed lines`), and says `suspect` when every
