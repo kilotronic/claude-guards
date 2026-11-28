@@ -215,7 +215,8 @@ def test_the_same_subject_with_other_changes_is_not_merged(tmp_path: Path) -> No
     assert rc == 3, out
     assert out["merged"] is False
     assert out["suspect"] is False
-    assert [(e["matched"], e["total"]) for e in out["evidence"]] == [(0, 6)]
+    # The local branch and origin's copy each say so: nothing shared among the six changed lines.
+    assert [(e["matched"], e["total"]) for e in out["evidence"]] == [(0, 6), (0, 6)]
 
 
 def test_one_landed_commit_does_not_merge_a_branch_with_another(tmp_path: Path) -> None:

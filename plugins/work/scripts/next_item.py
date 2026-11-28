@@ -26,7 +26,8 @@ exits 2; it never guesses.
 
 `next-item claim` commits the mark on one entry's line as the work branch's first commit; the claim holds once the
 work's pull request is open. `next-item release` commits the mark away. `next-item merged <branch>` says whether a branch's
-work is on main. `next-item claimed [<branch>]` says whether a branch's pull request may open: it changes only docs, it
+work is on main: as the same patch (`git cherry`), at a merged pull request's head, under the same subject with the
+same changed lines (a rebase onto a moved main), or because merging it would change nothing (`git merge-tree`). `next-item claimed [<branch>]` says whether a branch's pull request may open: it changes only docs, it
 carries a claim mark, or the repo keeps no todo file.
 
 Exit codes: 0 an answer, 1 an error, 2 unclear (what is missing is named), 3 no (the item is someone else's,
@@ -49,6 +50,7 @@ import re
 import socket
 import subprocess
 import sys
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -1540,8 +1542,8 @@ def release(args: argparse.Namespace, today: dt.date) -> tuple[int, dict]:
 
 def merged(args: argparse.Namespace) -> tuple[int, dict]:
     """The merged-branch test: every commit on main as the same patch, or a merged pull request whose head is the
-    branch's tip (a squash merge). The local branch and origin's copy are both tested, so unpushed commits on a
-    branch whose pull request merged are not taken for merged."""
+    branch's tip (a squash merge), or one of `_landed`'s two proofs. The local branch and origin's copy are both
+    tested, so unpushed commits on a branch whose pull request merged are not taken for merged."""
     name = args.branch
     if name.startswith("-") or not name.strip():
         raise RuntimeError(f"`{name}` is not a branch name")
@@ -1562,11 +1564,14 @@ def merged(args: argparse.Namespace) -> tuple[int, dict]:
     prs: list[dict] | None = None
     asked = False
     results: list[tuple[int, str]] = []
+    evidence: list[dict] = []
+    suspect = False
     for ref in refs:
         short = ref.replace("refs/heads/", "").replace("refs/remotes/", "")
         tip = run(["git", "rev-parse", ref], repo.root).stdout.strip()
         cherry = run(["git", "cherry", repo.ref, ref], repo.root).stdout.splitlines()
-        ahead = len([ln for ln in cherry if ln.startswith("+")])
+        plus = [ln.split()[1] for ln in cherry if ln.startswith("+")]
+        ahead = len(plus)
         if not ahead:
             results.append(
                 (OK, f"{short}: every commit is on {repo.ref} as the same patch")
@@ -1587,18 +1592,10 @@ def merged(args: argparse.Namespace) -> tuple[int, dict]:
                 repo.root,
             )
             asked = True
-        if prs is None:
-            results.append(
-                (
-                    UNCLEAR,
-                    f"{short}: {ahead} commits are not on {repo.ref} as the same patch; merged pull requests not checked",
-                )
-            )
-            continue
         hit = next(
             (
                 pr
-                for pr in prs
+                for pr in prs or []
                 if pr.get("headRefOid") == tip
                 or _ancestor(repo, tip, pr.get("headRefOid"))
             ),
@@ -1608,11 +1605,39 @@ def merged(args: argparse.Namespace) -> tuple[int, dict]:
             results.append(
                 (OK, f"{short}: pull request #{hit.get('number')} merged at this tip")
             )
+            continue
+        why, found = _landed(repo, ref, plus)
+        if why:
+            results.append((OK, f"{short}: {why}"))
+            continue
+        evidence += [{"ref": short, **e} for e in found]
+        near = len(found) == ahead and all(
+            2 * e["matched"] >= e["total"] for e in found
+        )
+        suspect = suspect or near
+        seen = "".join(
+            f"; {e['commit'][:9]} matches {e['base_commit'][:9]} on {repo.ref} in {e['matched']} of {e['total']}"
+            " changed lines"
+            for e in found
+        ) + (
+            "; suspect: it may have landed with edits, so read it before deleting"
+            if near
+            else ""
+        )
+        if prs is None:
+            results.append(
+                (
+                    UNCLEAR,
+                    f"{short}: {ahead} commits are not on {repo.ref} as the same patch; merged pull requests"
+                    + f" not checked{seen}",
+                )
+            )
         else:
             results.append(
                 (
                     NO,
-                    f"{short}: {ahead} commits are not on {repo.ref}, and no merged pull request ends at this tip",
+                    f"{short}: {ahead} commits are not on {repo.ref}, and no merged pull request ends at"
+                    + f" this tip{seen}",
                 )
             )
     rank = {OK: 0, UNCLEAR: 1, NO: 2}
@@ -1622,8 +1647,92 @@ def merged(args: argparse.Namespace) -> tuple[int, dict]:
         "branch": name,
         "refs": refs,
         "merged": verdict,
+        "suspect": suspect,
+        "evidence": evidence,
         "reason": "; ".join(t for _, t in results),
     }
+
+
+def _landed(repo: Repo, ref: str, plus: list[str]) -> tuple[str | None, list[dict]]:
+    """Two more proofs that a branch's work is on main, for commits `git cherry` could not match (`plus`): a rebase
+    onto a moved main changes a hunk's context lines, and so its patch id. Either merging the branch into main
+    would change nothing (`git merge-tree --write-tree`, git 2.38 or later; an older git proves nothing here), or
+    every commit has a commit of the same subject on main, since the branch left it, with the same changed lines.
+    Returns why it is merged, or None and what the same-subject commits matched: mostly the same lines suggests
+    a commit that landed with edits, which is the caller's to report and never merged."""
+    merge = run(["git", "merge-tree", "--write-tree", repo.ref, ref], repo.root, False)
+    tree = run(["git", "rev-parse", repo.ref + "^{tree}"], repo.root).stdout.strip()
+    if merge.returncode == 0 and merge.stdout.split("\n", 1)[0].strip() == tree:
+        return f"merging it into {repo.ref} changes nothing (git merge-tree)", []
+    fork = run(["git", "merge-base", repo.ref, ref], repo.root, False).stdout.strip()
+    if not fork:
+        return None, []
+    on_base: dict[str, list[str]] = {}
+    log = run(["git", "log", "--format=%H %s", f"{fork}..{repo.ref}"], repo.root)
+    for line in log.stdout.splitlines():
+        sha, _, subject = line.partition(" ")
+        on_base.setdefault(subject, []).append(sha)
+    found: list[dict] = []
+    for sha in plus:
+        subject = run(["git", "log", "-1", "--format=%s", sha], repo.root).stdout.strip(
+            "\n"
+        )
+        mine = _changed_lines(repo, sha)
+        best: dict | None = None
+        for other in on_base.get(subject, []) if mine else []:
+            theirs = _changed_lines(repo, other)
+            if not theirs:
+                continue
+            matched = sum((mine & theirs).values())
+            if best is None or matched > best["matched"]:
+                best = {
+                    "commit": sha,
+                    "subject": subject,
+                    "base_commit": other,
+                    "matched": matched,
+                    "total": sum((mine | theirs).values()),
+                }
+        if best:
+            found.append(best)
+    if len(found) == len(plus) and all(e["matched"] == e["total"] for e in found):
+        return (
+            f"every commit is on {repo.ref} under the same subject with the same changed lines",
+            found,
+        )
+    return None, found
+
+
+def _changed_lines(repo: Repo, sha: str) -> Counter | None:
+    """What a commit changes, apart from where: each added and removed line and each mode change, with its file,
+    from a diff with no context lines. None for a commit with a binary file (its diff doesn't show the content)
+    or one git can't diff. Bytes, since a diff is in whatever encoding the files are."""
+    try:
+        done = subprocess.run(
+            ["git", "diff-tree", "-p", "-U0", "--no-renames", "--no-ext-diff"]
+            + ["--no-textconv", "--no-color", "--root", "--format=", sha],
+            cwd=repo.root,
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if done.returncode != 0:
+        return None
+    lines: Counter = Counter()
+    file, in_hunk = b"", False
+    for line in done.stdout.split(b"\n"):
+        if line.startswith(b"diff --git "):
+            file, in_hunk = line, False
+        elif line.startswith(b"@@"):
+            in_hunk = True
+        elif in_hunk and line:
+            lines[(file, line)] += 1
+        elif line.startswith((b"Binary files ", b"GIT binary patch")):
+            return None
+        elif line and not line.startswith((b"index ", b"--- ", b"+++ ")):
+            lines[(file, line)] += 1
+    return lines
 
 
 def claimed(args: argparse.Namespace) -> tuple[int, dict]:

@@ -2,8 +2,8 @@
 name: branch-prune
 description:
   Delete remote branches, and local worktrees and branches, whose work is already merged
-  into the default branch. Rebase-safe (patch-equivalence via git cherry, not ahead
-  counts). Dry run by default; "--apply" deletes. Use for "prune merged branches", "clean
+  into the default branch. Rebase-safe (the same patch or the same changed lines, not
+  ahead counts). Dry run by default; "--apply" deletes. Use for "prune merged branches", "clean
   up stale worktrees".
 allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh repo view*), Bash(*/scripts/next-item" merged *), Bash(xargs *)
 ---
@@ -16,9 +16,10 @@ whether or not the plugin's SessionStart hook put it on `PATH`.
 Delete remote branches, and local worktrees and branches, whose commits are **already on
 the default branch**, using patch-equivalence rather than ancestry. With rebase or squash
 merging, a merged branch keeps showing commits in `git rev-list main..branch` because the
-merge rewrote its SHAs, so "ahead" counts lie. `git cherry` compares patches instead and
-reports work that landed as the **same patch**. It cannot see work that landed
-**re-authored**; see step 2a before trusting a `+`.
+merge rewrote its SHAs, so "ahead" counts lie. `next-item merged` compares the changes
+instead: the **same patch** (`git cherry`), or, after a rebase onto a base that had moved,
+the **same changed lines**. It cannot see work that landed **re-authored**; see step 2a
+before trusting a "not merged".
 
 ## Arguments
 
@@ -71,12 +72,19 @@ uses too):
 "${CLAUDE_PLUGIN_ROOT}/scripts/next-item" merged --no-fetch <branch>   # step 1 already fetched
 ```
 
-- Exit `0` → **fully merged**, safe to delete. Either every commit is on `$base` as the same patch
-  (`git cherry` shows no `+`), or a merged pull request's head is the branch's tip. The second case is how a
-  squash merge shows: it rewrites a multi-commit branch into one new commit, so `git cherry` shows every
-  original commit as `+`.
-- Exit `3` → no identical patch on `$base` and no merged pull request ending at this tip → **keep** (a
-  hypothesis, not a verdict; step 2a).
+- Exit `0` → **fully merged**, safe to delete; the output says which proof held:
+  - every commit is on `$base` as the same patch (`git cherry` shows no `+`);
+  - a merged pull request's head is the branch's tip. A squash merge shows this way: it rewrites the branch
+    into one new commit, so `git cherry` shows every original commit as `+`;
+  - every `+` commit has a commit of the same subject on `$base` with the same added and removed lines. A
+    rebase merge onto a base that had moved shows this way: the lines around each change differ, so the patch
+    id does too;
+  - merging the branch into `$base` would change nothing (`git merge-tree`, git 2.38 or later).
+- Exit `3` → none of those → **keep** (a hypothesis, not a verdict; step 2a). When a same-subject commit on
+  `$base` shares only some of a commit's changed lines, the output names both commits and the count
+  (`<commit> matches <base commit> on origin/$base in 9 of 11 changed lines`), and says `suspect` when every
+  `+` commit matches on at least half (`"suspect": true` and `evidence` with `--json`): the work probably
+  landed with edits.
 - Exit `2` → `gh` couldn't be asked about merged pull requests → **keep**, and say the check was incomplete.
 
 Build two lists: PRUNE (exit 0, no open PR, not protected) and KEEP (everything else, with
@@ -84,16 +92,19 @@ the reason: open PR #, unmerged commit count, or protected).
 
 ### 2a. Check the KEEP list for re-authored work
 
-`git cherry` compares **patch IDs**, so it only recognizes work that landed as the same
-patch. Work that landed **re-authored** (a later PR rewrote the same idea) reports `+`
+The test only recognizes work that landed as the same patch or the same changed lines. Work
+that landed **re-authored** (a later PR rewrote the same idea) reports "not merged"
 forever. The asymmetry matters:
 
-- `-` is a **verdict**: that patch is on `$base`. Safe to delete.
-- `+` is a **hypothesis**: "no identical patch found", not "this work is missing".
+- exit `0` is a **verdict**: the work is on `$base`. Safe to delete.
+- exit `3` is a **hypothesis**: "no identical change found", not "this work is missing".
 
 So the PRUNE test stays as written; the extra check goes on the KEEP list.
 
-For each KEEP branch with **no open PR** whose last commit is **older than 7 days**
+A branch the test called `suspect` is **KEEP-SUSPECT** at once, whatever its age, with the
+test's printed lines (commits and counts) as its evidence.
+
+For each other KEEP branch with **no open PR** whose last commit is **older than 7 days**
 (`git log -1 --format=%cr <ref>`):
 
 1. List what the branch touched:
@@ -155,9 +166,10 @@ For every worktree except the primary checkout (never touch that one):
    PR branch was deleted upstream): `git merge-base --is-ancestor <sha> origin/$base`, then fall back to
    `git cherry origin/$base <sha>`. Merged → **MERGED**, safe to remove. Not merged →
    **KEEP: N outstanding commits**.
-4. **Re-authored check.** A `+` here is the same hypothesis as in step 2. With no open PR
-   and a last commit older than 7 days, run the step 2a check and report **KEEP-SUSPECT**
-   instead of a bare count. Still never removed by `--apply`.
+4. **Re-authored check.** "Not merged" here is the same hypothesis as in step 2. When the
+   test said `suspect`, report **KEEP-SUSPECT** with its lines; else, with no open PR and a
+   last commit older than 7 days, run the step 2a check and report **KEEP-SUSPECT** instead
+   of a bare count. Still never removed by `--apply`.
 
 Two worktrees can point at the same branch or SHA (one on the branch, one detached at the
 same commit). Dedupe branch names so `git branch -D` runs once per name.

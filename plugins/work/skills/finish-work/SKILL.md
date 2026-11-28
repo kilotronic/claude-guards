@@ -49,9 +49,11 @@ A pull request the `pr-batch` skill closed and batched is done when the batch me
 "Landed in #<combined>" says where. Confirm that one shows `MERGED` and that the work is on main
 (`git log origin/main`), then clean up below; `next-item merged` won't count a branch the batch landed.
 
-`next-item merged` is the same test branch-prune uses: every commit on main as the same patch (`git cherry`), or a
-merged pull request whose head is the branch's tip, which is how a squash merge shows. Exit 3 means
-something on the branch is not on main: stop and look; don't delete.
+`next-item merged` is the same test branch-prune uses: every commit on main as the same patch (`git cherry`), a
+merged pull request whose head is the branch's tip (a squash merge), every commit on main under the same
+subject with the same changed lines (a rebase onto a main that had moved), or a merge into main that would
+change nothing. Exit 3 means something on the branch is not on main, or landed with edits (the output then
+gives the counts): stop and look; don't delete.
 
 Only then, from the main checkout:
 
